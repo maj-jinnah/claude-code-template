@@ -85,7 +85,7 @@ if (!fs.existsSync(settingsDst)) {
     deny.delete('Read(./.env.*)');
     deny.delete('Read(./**/.env.*)');
   }
-  for (const rule of settingsSrc.permissions.deny) deny.add(rule); // add our rules
+  for (const rule of settingsSrc.permissions.deny) deny.add(rule);
   current.permissions.deny = [...deny];
 
   current.hooks = current.hooks || {};
