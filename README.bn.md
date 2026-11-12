@@ -72,13 +72,16 @@ node "d:/learning project/claude-code-template/install.cjs" "<project>" --force
 - **Docker:** `docker compose down -v`, `docker volume rm` / `prune`
 - **Git:** `git push --force` / `-f` / `+branch`, `git reset --hard`, `git clean -f`, `git checkout .`, `git restore .`
 - **ফাইল:** `rm -rf` দিয়ে `/`, `~`, `$HOME`, `.`, `..`, `*` মোছা, আর PowerShell-এর `Remove-Item -Recurse` দিয়ে একই কাজ
+- **নাম ধরে process বন্ধ করা:** `taskkill /IM node.exe`, `killall node`, `pkill node`, `Stop-Process -Name node`, `kill $(pgrep node)` ইত্যাদি। এগুলো মেশিনের **সব** মিলে যাওয়া process বন্ধ করে, অন্য প্রজেক্টের dev server-সহ। আটকানোর বার্তায় Claude-কে বলা হয় কীভাবে শুধু port-এর process বন্ধ করতে হয়।
 - **Secret:** আসল `.env` ফাইল ছাপানো বা পড়া: `cat .env`, `grep KEY .env`, `sed -n p .env` ইত্যাদি। `.env.example` পড়া যায়।
 - **Publish:** `npm` / `pnpm` / `yarn` / `bun publish`
 
 যা আটকায় না:
 
 - নিরাপদ কমান্ড: `prisma migrate dev`, `git push --force-with-lease`, `rm -rf dist`, `docker compose down`, WHERE সহ `DELETE`।
+- একটা নির্দিষ্ট process বন্ধ করা: `taskkill /PID 1234 /F`, `kill 1234`, `Stop-Process -Id 1234`, `npx kill-port 3000`, `lsof -ti :3000 | xargs kill`, আর `pkill -f "node dist/main.js"` (নির্দিষ্ট কমান্ড)।
 - commit message, tag আর PR/issue-র লেখা। message-এ `.env` বা `git reset --hard` শব্দ থাকলে commit আটকায় না।
+- যে কমান্ড বিপজ্জনক কমান্ডের শুধু নাম উল্লেখ করে: `grep -rn "git reset --hard" docs`, `echo "never run killall node"`, `which pkill`, `man killall`। খোঁজা আর ছাপার কমান্ডের quote-এর ভেতরের লেখা উপেক্ষা করা হয়। তবে `echo`/`printf`-এর output অন্য program-এ pipe করলে উপেক্ষা হয় না, তাই `echo "DROP TABLE x" | psql` আটকায়। process-এর নিয়ম শুধু তখনই খাটে যখন program-টা কমান্ড হিসেবে চলছে।
 - `grep -rn "process.env" src` বা `grep "DROP TABLE" migrations`-এর মতো খোঁজাখুঁজি। SQL-এর শব্দ শুধু তখনই ধরা হয় যখন কমান্ডটা সত্যিই ডাটাবেস client বা `node` চালায়।
 
 আটকে যাওয়া কোনো কমান্ড আসলেই দরকার হলে সেটা নিজের টার্মিনালে চালান। অথবা প্রজেক্টের `.claude/hooks/guard.cjs` থেকে সেই লাইনটা মুছে দিন।
@@ -177,6 +180,28 @@ claude --agent architect      # নিজেও কোড লেখে, দর�
 
 **Claude-কে `.env` পড়তে দিতে চাইলে** `settings.json`-এর `permissions.deny` থেকে লাইনগুলো সরান, আর `guard.cjs`-এর "Secrets" অংশের দুটো লাইন মুছুন।
 
+## সচল রাখা
+
+Node বা Claude Code আপডেট করার পরে, বা টেমপ্লেটের কোনো ফাইল বদলালে, টেমপ্লেট ফোল্ডার থেকে self-test চালান:
+
+```bash
+node test/selftest.cjs
+```
+
+এটা একটা temp ফোল্ডারে hook, installer আর agent ফাইলের ২৭১টা চেক চালায়। কোনো network বা model call লাগে না। শেষে `OK` দেখায়, অথবা কোনগুলো fail করেছে তার তালিকা।
+
+self-test hook script-গুলো সরাসরি চালায়, তাই Claude Code নিজে বদলালে সেটা ধরতে পারে না। সেটা যাচাই করতে টেমপ্লেট বসানো কোনো প্রজেক্টে নতুন session খুলে Claude-কে `git reset --hard` চালাতে বলুন। guard আটকালে বুঝবেন hook ঠিকমতো যুক্ত আছে।
+
+maintain না করলে কী বন্ধ হয়ে যেতে পারে, আর তখন কী হবে:
+
+| Claude Code-এ এটা বদলালে | ফল | কীভাবে বুঝবেন |
+|---|---|---|
+| hook-এর input format বা exit code 2-এর নিয়ম | hook আর আটকায় না, Claude এমনভাবে চলে যেন টেমপ্লেট নেই | উপরের `git reset --hard` পরীক্ষা আর আটকায় না |
+| tool-এর নাম (`Bash`, `PowerShell`, `Edit`, `Write`, `MultiEdit`) | সংশ্লিষ্ট hook চলা বন্ধ হয় | একই পরীক্ষা, বা এডিটের পর Prettier format হয় না |
+| subagent ফাইলের format বা `tools:`-এর tool-এর নাম | কোনো agent `/agents`-এ দেখা যায় না, বা কোনো tool হারায় | `/agents` তালিকা, বা agent বলে কোনো কাজ করতে পারছে না |
+
+প্রতিটা hook এমনভাবে লেখা যে সমস্যা হলে কাজ আটকায় না: input পড়তে না পারলে বা crash করলে Claude-কে চলতে দেয়। তাই Claude Code-এ বড় কোনো পরিবর্তন এলে সুরক্ষা চুপচাপ চলে যেতে পারে, কিন্তু আপনার কাজ কখনো আটকে যাবে না।
+
 ## সীমাবদ্ধতা
 
 - **guard একটা নিরাপত্তা জাল, পুরোপুরি নিশ্চিত সুরক্ষা না।** কমান্ড কোনো script ফাইলের ভেতরে লুকানো থাকলে (যেমন `npm run reset-db` বা `node scripts/wipe.js`) এটা ধরতে পারে না। `grep -r KEY .` দিয়ে পুরো ফোল্ডার খুঁজলে `.env`-এর লাইনও বেরিয়ে আসতে পারে। আসল সুরক্ষা হলো production-এর credential লোকাল `.env`-এ না রাখা।
@@ -190,16 +215,18 @@ claude --agent architect      # নিজেও কোড লেখে, দর�
 
 Windows 11-এ Claude Code 2.1.300, Node 24, TypeScript 7 আর Prettier 3 দিয়ে টেস্ট করা হয়েছে।
 
-**Script দিয়ে টেস্ট:**
+**Script দিয়ে টেস্ট** (`node test/selftest.cjs`, ২৭১টা চেক, সব পাস):
 
-- guard: ১৫৩টা কমান্ড (৭৬টা আটকানোর, ৭৭টা চলতে দেওয়ার), সব ঠিক
-- verify: এক package আর monorepo দুটোতেই, commit gate, timeout, বড় output, ভুল input সহ
-- format: স্পেসওয়ালা ফাইলের নাম, প্রজেক্টের বাইরের ফাইল আর `node_modules` সহ
-- installer: নতুন ইনস্টল, পুনরায় চালানো, merge আর `--force` আপগ্রেড
+- guard: ২৩৫টা কমান্ড (১১৯টা আটকানোর, ১১৬টা চলতে দেওয়ার)
+- verify: এক package আর monorepo, commit gate, ৩ বার চেষ্টার সীমা, timeout আর ভুল input
+- installer: নতুন ইনস্টল, পুনরায় চালানো, আপনার নিজের settings-এর সাথে merge, আর `.bak` backup সহ `--force`
+- agent ফাইল: frontmatter ঠিক আছে কিনা
+
+ডেভেলপমেন্টের সময় আলাদাভাবে টেস্ট করা: আসল Prettier দিয়ে format (নেস্টেড ফোল্ডার, স্পেসওয়ালা ফাইলের নাম, প্রজেক্টের বাইরের ফাইল আর `node_modules`), আর বড় টেস্ট output-এ verify।
 
 **আসল Claude Code session-এ টেস্ট** (haiku মডেলে, headless `claude -p` মোডে):
 
-- guard কমান্ড আটকেছে, মূল session আর subagent দুটোতেই।
+- guard কমান্ড আটকেছে, মূল session আর subagent দুটোতেই। `killall node`-ও আটকেছে, কিন্তু একই শব্দ `grep` দিয়ে খোঁজা ঠিকমতো চলেছে।
 - verify টাইপ error ধরে Claude-কে দিয়ে ঠিক করিয়েছে। monorepo-তে ঠিক package-এ চলেছে।
 - commit gate ভাঙা কোডের commit আটকেছে। Claude থেমে সিদ্ধান্ত চেয়েছে।
 - message-এ `.env` শব্দ থাকা commit আটকায়নি।
@@ -210,6 +237,7 @@ Windows 11-এ Claude Code 2.1.300, Node 24, TypeScript 7 আর Prettier 3 দ�
 
 **যা টেস্ট করা হয়নি:**
 
+- আসল session-এ Claude PID দিয়ে একটা process বন্ধ করছে (নাম ধরে আটকানোটা live টেস্ট করা হয়েছে)
 - VS Code extension-এর ভেতরে (সব টেস্ট টার্মিনালের `claude` দিয়ে)
 - macOS আর Linux
 - আসল NestJS প্রজেক্টে jest-এর বড় টেস্ট স্যুট
@@ -218,4 +246,4 @@ Windows 11-এ Claude Code 2.1.300, Node 24, TypeScript 7 আর Prettier 3 দ�
 
 ## কৃতজ্ঞতা
 
-আইডিয়াগুলো (command safety, completion fence, output ছোট রাখা, ৮টা agent-এর ভূমিকা) এসেছে [agyis-harness](https://github.com/kuasha420/agyis-harness) থেকে। সেটা Google Antigravity-র জন্য বানানো, Apache-2.0 লাইসেন্সে, লেখক Arafat Zahan / Purrfect Software Limited। এই টেমপ্লেটের কোড আর agent-এর instruction Claude Code-এর জন্য নতুন করে লেখা।
+আইডিয়াগুলো (command safety, completion fence, output ছোট রাখা, ৮টা agent-এর ভূমিকা, নাম ধরে process বন্ধ না করা, আর বারবার fail আর পুরনো cache নিয়ে `CLAUDE.md`-এর নিয়ম) এসেছে [agyis-harness](https://github.com/kuasha420/agyis-harness) থেকে। সেটা Google Antigravity-র জন্য বানানো, Apache-2.0 লাইসেন্সে, লেখক Arafat Zahan / Purrfect Software Limited। এই টেমপ্লেটের কোড আর agent-এর instruction Claude Code-এর জন্য নতুন করে লেখা।

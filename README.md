@@ -72,13 +72,16 @@ Blocked:
 - **Docker:** `docker compose down -v`, `docker volume rm` / `prune`
 - **Git:** `git push --force` / `-f` / `+branch`, `git reset --hard`, `git clean -f`, `git checkout .`, `git restore .`
 - **Files:** `rm -rf` on `/`, `~`, `$HOME`, `.`, `..` or `*`, and the same with PowerShell's `Remove-Item -Recurse`
+- **Processes by name:** `taskkill /IM node.exe`, `killall node`, `pkill node`, `Stop-Process -Name node`, `kill $(pgrep node)` and similar. These stop every matching process on the machine, including other projects' dev servers. The block message tells Claude how to stop only the process on the port instead.
 - **Secrets:** printing or reading a real `.env` file: `cat .env`, `grep KEY .env`, `sed -n p .env` and similar. `.env.example` is allowed.
 - **Publishing:** `npm` / `pnpm` / `yarn` / `bun publish`
 
 Not blocked:
 
 - Safe variants: `prisma migrate dev`, `git push --force-with-lease`, `rm -rf dist`, `docker compose down`, `DELETE` with a `WHERE`.
+- Stopping one process: `taskkill /PID 1234 /F`, `kill 1234`, `Stop-Process -Id 1234`, `npx kill-port 3000`, `lsof -ti :3000 | xargs kill`, and `pkill -f "node dist/main.js"` (a specific command line).
 - The text of commit messages, tags, and PR or issue bodies. A commit whose message mentions `.env` or `git reset --hard` goes through.
+- Commands that only mention a dangerous command: `grep -rn "git reset --hard" docs`, `echo "never run killall node"`, `which pkill`, `man killall`. Quoted text in search and print commands is ignored, unless `echo`/`printf` is piped into another program (`echo "DROP TABLE x" | psql` is blocked). Process rules only match a program in command position.
 - Searches such as `grep -rn "process.env" src` or `grep "DROP TABLE" migrations`. SQL keywords are only checked when the command actually runs a database client or `node`.
 
 If a blocked command is genuinely needed, run it in your own terminal, or delete its line from the project's `.claude/hooks/guard.cjs`.
@@ -177,6 +180,28 @@ With `--agent`, the agent's instructions replace Claude Code's default system pr
 
 **To let Claude read `.env`,** remove the lines from `permissions.deny` in `settings.json` and delete the two lines under "Secrets" in `guard.cjs`.
 
+## Keeping it working
+
+Run the self-test from the template folder after you update Node or Claude Code, or change any template file:
+
+```bash
+node test/selftest.cjs
+```
+
+It runs 271 checks on the hooks, the installer and the agent files in a temporary folder, with no network and no model calls, and ends with `OK` or a list of failures.
+
+The self-test calls the hook scripts directly, so it cannot notice a change in Claude Code itself. For that, open a new session in a project that has the template and ask Claude to run `git reset --hard`. If the guard blocks it, the hooks are wired up correctly.
+
+What can stop working if the template is not maintained, and what happens then:
+
+| If this changes in Claude Code | Effect | How you would notice |
+|---|---|---|
+| Hook input format or the exit-code-2 rule | Hooks stop blocking; Claude works as if there were no template | The `git reset --hard` check above is no longer blocked |
+| Tool names (`Bash`, `PowerShell`, `Edit`, `Write`, `MultiEdit`) | The matching hook stops running | Same check, or no Prettier formatting after edits |
+| Subagent file format or tool names in `tools:` | An agent is missing from `/agents`, or loses a tool | `/agents` list, or the agent says it cannot do something |
+
+Every hook is written to fail open: if it cannot read its input or crashes, it lets Claude continue rather than blocking work. So a breaking change in Claude Code removes protection quietly but never stops you from working.
+
 ## Limitations
 
 - **The guard is a safety net, not a sandbox.** It cannot see a command hidden inside a script file (such as `npm run reset-db` or `node scripts/wipe.js`). A folder-wide search like `grep -r KEY .` can still print lines from `.env`. The real protection is not keeping production credentials in a local `.env`.
@@ -190,16 +215,18 @@ With `--agent`, the agent's instructions replace Claude Code's default system pr
 
 Tested on Windows 11 with Claude Code 2.1.300, Node 24, TypeScript 7 and Prettier 3.
 
-**Scripted tests:**
+**Scripted tests** (`node test/selftest.cjs`, 271 checks, all passing):
 
-- guard: 153 commands (76 that must be blocked, 77 that must be allowed), all correct
-- verify: single-package and monorepo projects, the commit gate, timeouts, large output and malformed input
-- format: file names with spaces, files outside the project and `node_modules`
-- installer: fresh install, re-run, merge and `--force` upgrade
+- guard: 235 commands (119 that must be blocked, 116 that must be allowed)
+- verify: single-package and monorepo projects, the commit gate, the 3-attempt limit, timeouts and malformed input
+- installer: fresh install, re-run, merge with your own settings, and `--force` with `.bak` backups
+- agent files: valid frontmatter
+
+Tested separately during development: Prettier formatting with real Prettier (nested folders, file names with spaces, files outside the project and `node_modules`) and verify with large test output.
 
 **Real Claude Code sessions** (haiku model, headless `claude -p` mode):
 
-- The guard blocked commands in both the main session and a subagent.
+- The guard blocked commands in both the main session and a subagent, including `killall node`, while `grep` for the same words ran normally.
 - verify caught a type error and made Claude fix it. In a monorepo it ran in the right package.
 - The commit gate blocked a commit of broken code. Claude stopped and asked for a decision.
 - A commit whose message mentions `.env` was not blocked.
@@ -210,6 +237,7 @@ Tested on Windows 11 with Claude Code 2.1.300, Node 24, TypeScript 7 and Prettie
 
 **Not tested:**
 
+- Claude stopping a single process by PID in a real session (blocking by name was tested live)
 - Inside the VS Code extension (every test used the terminal `claude`)
 - macOS and Linux
 - A real NestJS project with a large jest suite
@@ -218,4 +246,4 @@ Tested on Windows 11 with Claude Code 2.1.300, Node 24, TypeScript 7 and Prettie
 
 ## Credits
 
-The ideas (command safety, the completion fence, keeping output short, the eight agent roles) come from [agyis-harness](https://github.com/kuasha420/agyis-harness), a harness for Google Antigravity by Arafat Zahan / Purrfect Software Limited, licensed Apache-2.0. The code and agent instructions in this template were written from scratch for Claude Code.
+The ideas (command safety, the completion fence, keeping output short, the eight agent roles, not killing processes by name, and the `CLAUDE.md` rules on repeated failures and stale caches) come from [agyis-harness](https://github.com/kuasha420/agyis-harness), a harness for Google Antigravity by Arafat Zahan / Purrfect Software Limited, licensed Apache-2.0. The code and agent instructions in this template were written from scratch for Claude Code.

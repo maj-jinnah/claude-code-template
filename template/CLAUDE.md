@@ -49,6 +49,9 @@ Copy the real scripts from this project's `package.json`. Delete rows that do no
 - Write or update tests for every behavior change.
 - Do not add new dependencies without saying why.
 - Never run destructive DB or git commands (reset, drop, force push) — ask me instead.
+- If the same command fails twice, stop retrying variations: tell me the error and propose concrete options.
+- Strange build or type errors after switching branches or upgrading packages: delete stale caches (`.next/`, `.turbo/`, `node_modules/.cache`, `dist/`) and retry before changing code.
+- Port already in use: find the PID holding that port and stop only that process (Windows: `netstat -ano | findstr :3000`, then `taskkill /PID <pid> /F`; macOS/Linux: `lsof -ti :3000 | xargs kill`). Never kill processes by name, and never stop an unrelated service (e.g. another project's Postgres container) — use a different port instead.
 
 ## Guardrails already active (see .claude/)
 - Destructive DB / git / delete commands are blocked by a hook. If one is blocked, do not work around it — ask me to run it.
