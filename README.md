@@ -1,110 +1,166 @@
-# Claude Code Template (Node / TypeScript)
+# Claude Code Template (Node.js / TypeScript)
 
-যেকোনো Node.js / TypeScript প্রজেক্টে (NestJS, Express, Next.js, React) Claude Code-কে নিরাপদ আর নির্ভরযোগ্য করার টেমপ্লেট।
-আইডিয়াগুলো নেওয়া হয়েছে `agyis-harness` থেকে, তবে Claude Code-এর জন্য Node দিয়ে নতুন করে লেখা। বাড়তি কোনো dependency লাগে না, শুধু Node।
+**English** | [বাংলা](README.bn.md)
 
-## কী কী আছে
+A drop-in setup that makes Claude Code safer and more reliable in any Node.js / TypeScript project (NestJS, Express, Next.js, React). One command installs it into a project.
 
-| ফাইল | কখন চলে | কী করে |
+It contains three kinds of things:
+
+- **Hooks:** small Node scripts that run automatically before and after Claude's actions. They enforce rules in code instead of asking the model to behave.
+- **Subagents:** eight specialists such as a planner, a reviewer and an investigator.
+- **`CLAUDE.md`:** a template for the project's commands and rules.
+
+There are no dependencies beyond Node itself.
+
+## What's included
+
+| File | When it runs | What it does |
 |---|---|---|
-| `.claude/hooks/guard.cjs` | Claude কোনো কমান্ড চালানোর **আগে** (Bash আর PowerShell দুটোতেই) | বিপজ্জনক কমান্ড আটকায় (নিচে তালিকা) |
-| `.claude/hooks/format.cjs` | Claude কোনো ফাইল এডিট করার **পরে** | সেই ফাইলে Prettier চালায় |
-| `.claude/hooks/verify.cjs` | এডিটের **পরে** আর কাজ **শেষ করার আগে** | Claude কোড বদলালে typecheck আর টেস্ট পাস না হওয়া পর্যন্ত থামতে দেয় না |
-| `.claude/settings.json` | — | উপরের hook-গুলো চালু করে, আর আসল `.env` ফাইল পড়া বন্ধ রাখে |
-| `.claude/agents/*.md` | আপনি বা Claude ডাকলে | ৮টা বিশেষজ্ঞ subagent (নিচে বিস্তারিত) |
-| `.claude/scratch/` | — | investigator-এর reproduction script রাখার জায়গা, git-এ যায় না |
-| `CLAUDE.md` | প্রতিটা সেশনের শুরুতে | প্রজেক্টের কমান্ড আর নিয়ম। **`<...>` জায়গাগুলো নিজে পূরণ করবেন** |
+| `.claude/hooks/guard.cjs` | **Before** Claude runs a shell command (Bash and PowerShell) | Blocks destructive commands |
+| `.claude/hooks/format.cjs` | **After** Claude edits a file | Runs Prettier on that file |
+| `.claude/hooks/verify.cjs` | After edits, before `git commit`, and before Claude finishes | When Claude has changed code, runs typecheck and tests. On failure it blocks the commit and sends Claude back to fix it |
+| `.claude/settings.json` | — | Registers the hooks and denies reading real `.env` files |
+| `.claude/agents/*.md` | When you or Claude call them | Eight specialist subagents |
+| `.claude/scratch/` | — | Where the investigator puts reproduction scripts; never committed |
+| `CLAUDE.md` | At the start of every session | Project commands and rules. **You must fill in the `<...>` placeholders** |
 
-## কোনো প্রজেক্টে বসানো
+## Requirements
 
-```bash
-node "d:/learning project/claude-code-template/install.cjs" "d:/learning project/nest-learning"
-```
+- Node.js 18 or newer (tested on Node 24)
+- Claude Code 2.1 or newer (tested on 2.1.300)
+- Git
+- On Windows: **Git for Windows** (Git Bash). Hook commands run in Git Bash. Without it, Claude Code runs them in PowerShell, where this template's commands are not expected to work (not tested).
 
-- আপনার কোনো ফাইল মুছে ফেলে না বা overwrite করে না।
-- আগে থেকে `.claude/settings.json` থাকলে **merge** করে। আপনার নিজের hook আর permission থেকে যায়, আর আসল ফাইলটা `settings.json.bak` নামে রাখা হয়।
-- আগে থেকে `CLAUDE.md` থাকলে সেটা ছোঁয় না।
-- দ্বিতীয়বার চালালে কিছুই বদলায় না।
-
-তারপর:
-1. প্রজেক্টের `CLAUDE.md` খুলে `<...>` জায়গাগুলো পূরণ করুন। **এটা বাদ দেবেন না।** পূরণ না করা পর্যন্ত ফাইলের উপরের নোটটা Claude-কে বলে `package.json` দেখে চলতে।
-2. সেই প্রজেক্টে **নতুন** Claude Code session খুলুন। hook আর agent শুধু session শুরুর সময় লোড হয়।
-3. লোড হয়েছে কিনা দেখতে: টার্মিনালের `claude`-এ `/agents` লিখুন। VS Code extension-এ hook দেখা যায় Customize অংশের **Hooks**-এ।
-4. টিমের সাথে শেয়ার করতে চাইলে `.claude/` আর `CLAUDE.md` git-এ commit করুন। `*.bak` ফাইল commit করার দরকার নেই।
-
-**টেমপ্লেট আপডেট করলে:** এই ফোল্ডারের ফাইল বদলানোর পর কোনো প্রজেক্টে নতুন ভার্সন নিতে শেষে `--force` দিন। এতে টেমপ্লেটের hook আর agent ফাইল, আর settings-এ এই টেমপ্লেটের এন্ট্রিগুলো বদলায়। প্রজেক্টের কোনো ফাইল টেমপ্লেট থেকে আলাদা হলে (যেমন আপনি নিজে বদলেছেন) আগেরটা `<নাম>.bak` হিসেবে রেখে দেয়। আপনার নিজের hook আর `CLAUDE.md` যেমন আছে তেমনই থাকে।
+## Install into a project
 
 ```bash
-node "d:/learning project/claude-code-template/install.cjs" "<project>" --force
+node /path/to/claude-code-template/install.cjs /path/to/your-project
 ```
 
-## ৮টা Subagent
+From inside the project folder, pass `.` as the target.
 
-agyis-harness-এর ৮টা agent থেকে Claude Code-এর জন্য নতুন করে লেখা। Antigravity আর PSL-নির্দিষ্ট অংশ বাদ দেওয়া হয়েছে, আর Node/TS stack-এর সাথে মিলিয়ে নেওয়া হয়েছে। প্রতিটা agent-এর **tool-এর তালিকাই** ঠিক করে দেয় সে কী পারে। তাই "read-only" agent সত্যিই ফাইল এডিট করতে পারে না।
+- It never deletes or overwrites your files.
+- If `.claude/settings.json` already exists, it is **merged**. Your own hooks and permissions stay, and the original is kept as `settings.json.bak`.
+- An existing `CLAUDE.md` is left untouched.
+- Running it a second time changes nothing.
 
-| Agent | কাজ | ফাইল এডিট? | কমান্ড চালাতে পারে? |
-|---|---|---|---|
-| `planner` | কোড পড়ে ফাইল-ধরে-ধরে plan বানায় | ❌ | ❌ |
-| `builder` | plan-এর একটা ধাপ কোড আর টেস্টসহ বানায় | ✅ | ✅ |
-| `reviewer` | শুধু diff দেখে bug, নিরাপত্তা আর টেস্টের ঘাটতি ধরে | ❌ | শুধু git পড়া |
-| `auditor` | typecheck, lint, test, build চালিয়ে প্রমাণসহ রিপোর্ট দেয় | ❌ | ✅ |
-| `custodian` | duplicate কোড আর আর্কিটেকচার চেক করে, শুধু দরকারি ফাইল commit করে | ❌ | ✅ (git) |
-| `investigator` | bug-এর root cause খোঁজে, `.claude/scratch/`-এ repro বানিয়ে প্রমাণ দেয় | শুধু scratch-এ | ✅ |
-| `architect` | বড় কাজ: ডিজাইন করে, নিজে লেখে, বাকিদের কাজ ভাগ করে দেয় | ✅ | ✅ |
-| `coordinator` | নিজে কোড লেখে না, পুরো টিম চালায় | ❌ | ❌ |
+Then:
 
-### ব্যবহার
+1. Open the project's `CLAUDE.md` and fill in the `<...>` placeholders. **Do not skip this.** The easy way is to ask Claude: "Fill in the `<...>` placeholders in CLAUDE.md from package.json and the code." Until they are filled in, a note at the top of the file tells Claude to rely on `package.json` instead.
+2. Start a **new** Claude Code session in that project. Hooks and agents load only at session start.
+3. Check that they loaded. In the terminal `claude`, type `/agents` to list the agents. In the VS Code extension, hooks are listed under **Hooks** in the Customize section. A quick end-to-end check: ask Claude to run `git reset --hard`. If the guard blocks it, the hooks are active.
+4. To share the setup with your team, commit `.claude/` and `CLAUDE.md`. The `*.bak` files do not need to be committed.
 
-**সাধারণ session থেকে**, যেকোনো agent-কে নাম ধরে ডাকুন:
-```
-reviewer subagent দিয়ে আমার uncommitted changes review করো
-investigator দিয়ে বের করো login কেন fail করছে
-custodian দিয়ে এই কাজটা commit করো
-```
-বিবরণ দেখে Claude নিজেও দরকারমতো এদের ডাকে।
+### Updating a project after the template changes
 
-**বড় কাজে coordinator বা architect-কে মূল session হিসেবে চালান:**
+Add `--force`:
+
 ```bash
-claude --agent coordinator    # নিজে কোড লেখে না, planner → builder → reviewer → custodian → auditor চালায়
-claude --agent architect      # নিজেও কোড লেখে, দরকারে বাকিদের কাজ দেয়
+node /path/to/claude-code-template/install.cjs /path/to/your-project --force
 ```
-এই দুটোকে সাধারণ subagent হিসেবে ডাকবেন না। Claude Code-এ subagent আরেকটা subagent চালু করতে *পারে*, কিন্তু সেগুলো পেছনে (background-এ) চলে, আর টেস্টে দেখা গেছে coordinator তাদের ফলাফল আসার আগেই নিজের রিপোর্ট দিয়ে শেষ হয়ে যায়। ফলে reviewer আর auditor চলেই না। মূল session হিসেবে চালালে পুরো ladder শেষ হয়।
 
-`--agent` দিয়ে চালালে ওই agent-এর instruction Claude Code-এর সাধারণ system prompt-এর জায়গা নেয়, আর session শুধু ওই agent-এর tool পায়।
+This updates the template's hook and agent files and its entries in `settings.json`. If a file in the project differs from the template (for example, you edited it), the previous version is kept as `<name>.bak`. Your own hooks and your `CLAUDE.md` are not touched.
 
-**VS Code extension-এ** `--agent` flag দেওয়ার জায়গা নেই। বিকল্প হলো প্রজেক্টের `.claude/settings.local.json`-এ `{"agent": "coordinator"}` লেখা। টার্মিনালের `claude`-এ এটা কাজ করে (টেস্ট করা), তবে extension-এ কাজ করে কিনা যাচাই করা হয়নি, আর ডকেও লেখা নেই। মনে রাখবেন, এটা থাকলে ওই প্রজেক্টের **প্রতিটা** session coordinator হয়ে যাবে, তাই কাজ শেষে মুছে ফেলবেন। সবচেয়ে নিশ্চিত উপায় VS Code-এর টার্মিনালে `claude --agent coordinator` চালানো।
+## How the hooks work
 
-**খরচ মনে রাখবেন:** প্রতিটা subagent আলাদা model call। ছোট কাজে (একটা ফাংশন ঠিক করা) সরাসরি Claude-কে বলাই সস্তা আর দ্রুত। ladder ব্যবহার করবেন বড় feature বা ঝুঁকিপূর্ণ পরিবর্তনে। কোনো agent-কে সস্তা model-এ চালাতে চাইলে তার ফাইলের `model: inherit` বদলে `model: sonnet` বা `model: haiku` দিন (যেমন reviewer বা auditor-এর জন্য)।
+### guard.cjs: blocks destructive commands
 
-## প্রতিটা hook কীভাবে কাজ করে
+Blocked:
 
-### guard.cjs: যা আটকায়
-- **ORM:** `prisma migrate reset`, `prisma db push --force-reset` / `--accept-data-loss`, `typeorm schema:drop`, `sequelize db:drop`
-- **SQL / Mongo / Redis:** `DROP DATABASE/TABLE/SCHEMA`, `TRUNCATE`, WHERE ছাড়া `DELETE FROM`, `dropDatabase()`, `collection.drop()`, `deleteMany({})`, `FLUSHALL` / `FLUSHDB`
+- **ORMs:** `prisma migrate reset`, `prisma db push --force-reset` / `--accept-data-loss`, `typeorm schema:drop`, `sequelize db:drop`
+- **SQL / Mongo / Redis:** `DROP DATABASE/TABLE/SCHEMA`, `TRUNCATE`, `DELETE FROM` without `WHERE`, `dropDatabase()`, `collection.drop()`, `deleteMany({})`, `FLUSHALL` / `FLUSHDB`
 - **Docker:** `docker compose down -v`, `docker volume rm` / `prune`
 - **Git:** `git push --force` / `-f` / `+branch`, `git reset --hard`, `git clean -f`, `git checkout .`, `git restore .`
-- **ফাইল:** `rm -rf` দিয়ে `/`, `~`, `.`, `..`, `*` মোছা, আর PowerShell-এর `Remove-Item -Recurse` দিয়ে একই কাজ
-- **Secret:** `cat .env` জাতীয় কমান্ড (`.env.example` পড়া যায়)
-- **Publish:** `npm` / `pnpm` / `yarn` / `bun publish`
+- **Files:** `rm -rf` on `/`, `~`, `$HOME`, `.`, `..` or `*`, and the same with PowerShell's `Remove-Item -Recurse`
+- **Secrets:** printing or reading a real `.env` file: `cat .env`, `grep KEY .env`, `sed -n p .env` and similar. `.env.example` is allowed.
+- **Publishing:** `npm` / `pnpm` / `yarn` / `bun publish`
 
-যা আটকায় না: `prisma migrate dev`, `git push --force-with-lease`, `rm -rf dist`, `docker compose down`, WHERE সহ `DELETE`। SQL-এর শব্দগুলো শুধু তখনই ধরা হয় যখন কমান্ডটা সত্যিই ডাটাবেস client বা `node` চালায়। তাই `git commit -m "drop table ..."` বা `grep "DROP TABLE"` আটকায় না।
+Not blocked:
 
-### verify.cjs: completion fence
-1. Claude প্রজেক্টের ভেতরে কোনো `.ts/.tsx/.js/.jsx` ফাইল এডিট করলে hook মনে রাখে "কোড বদলেছে"।
-2. Claude থামতে গেলে hook চেক চালায়: TypeScript ইনস্টল থাকলে `tsc --noEmit`, আর `package.json`-এ `test` script থাকলে সেটা।
-3. পাস করলে Claude থামে। Fail করলে error-এর শেষ অংশ Claude-কে দেখানো হয়, আর সে ঠিক করতে বাধ্য হয়।
-4. Claude যদি কোড না বদলে আবার থামে (যেমন আপনার সিদ্ধান্ত দরকার), বা ৩ বার চেষ্টার পরও fail করে, তখন hook তাকে ছেড়ে দেয় আর **আপনাকে একটা warning দেখায়** ("Stop says: verify hook: ...")। তাই কখনো অনন্ত লুপ হয় না।
+- Safe variants: `prisma migrate dev`, `git push --force-with-lease`, `rm -rf dist`, `docker compose down`, `DELETE` with a `WHERE`.
+- The text of commit messages, tags, and PR or issue bodies. A commit whose message mentions `.env` or `git reset --hard` goes through.
+- Searches such as `grep -rn "process.env" src` or `grep "DROP TABLE" migrations`. SQL keywords are only checked when the command actually runs a database client or `node`.
 
-**এটা কী নিশ্চিত করে আর কী করে না:** fence নিশ্চিত করে যে Claude error-টা দেখবে আর আপনি warning পাবেন। কোড ঠিক হয়ে যাবে, এই গ্যারান্টি দেয় না। warning দেখলে নিজে চেক করবেন।
+If a blocked command is genuinely needed, run it in your own terminal, or delete its line from the project's `.claude/hooks/guard.cjs`.
 
-Claude কোড না বদলালে (শুধু প্রশ্নের উত্তর, ডক পড়া) কিছুই চলে না, এমনকি আপনার git-এ আগে থেকে uncommitted কাজ থাকলেও। git ছাড়া প্রজেক্টেও কাজ করে। subagent (যেমন builder) কোড বদলালেও ধরা পড়ে, আর মূল session থামার সময় চেক হয়।
+### verify.cjs: completion fence and commit gate
 
-### format.cjs
-শুধু প্রজেক্টের ভেতরের ফাইলে, আর শুধু প্রজেক্টে Prettier ইনস্টল থাকলে চলে। কিছু ডাউনলোড করে না, আর কখনো Claude-কে আটকায় না।
+1. When Claude edits a `.ts/.tsx/.js/.jsx` file inside the project, the hook records that code changed, and which package the file belongs to (the nearest `package.json`).
+2. **Commit gate:** if Claude runs `git commit` while changed code is unverified, the checks run first. If they fail, the commit is blocked. To skip the gate on purpose, use `git commit --no-verify`, the same flag that skips git's own hooks.
+3. **Completion fence:** when Claude tries to finish, the same checks run. If they pass, Claude stops. If they fail, the tail of the error is shown to Claude and it is sent back to work.
+4. If Claude stops again without changing code (for example, it needs a decision from you), or the checks still fail after 3 fix attempts, the hook lets it go and **shows you a warning** ("Stop says: verify hook: ..."). It can never loop forever.
 
-## প্রজেক্ট অনুযায়ী বদলানো
+**Which checks run:**
 
-**verify-তে কী চলবে সেটা ঠিক করতে:** প্রজেক্টের `package.json`-এ একটা `claude:verify` script যোগ করুন। এটা থাকলে verify hook ডিফল্ট চেকের বদলে শুধু এই script চালাবে:
+- `tsc --noEmit`, if the package has a `tsconfig.json` and TypeScript is installed
+- the `test` script, if `package.json` has one (run with npm, pnpm, yarn or bun, detected from the lock file)
+- if `package.json` has a `claude:verify` script, **only that script** runs instead of the two above
+
+**What this guarantees and what it does not:** the fence guarantees that Claude sees the failure, that broken code is not committed, and that you get a warning. It does not guarantee the code gets fixed. When you see the warning, check for yourself.
+
+Other behaviour:
+
+- If Claude changed no code (answering a question, reading docs), nothing runs, even if your working tree already has uncommitted changes.
+- It works in projects without git.
+- Edits made by subagents (such as the builder) are caught too.
+- **Monorepos:** if `package.json` is in a subfolder (for example `services/api/package.json`), the checks run in that folder. If several packages were edited, each one is checked (up to 8). TypeScript installed at the repository root is found.
+- If the checks take longer than 270 seconds, the hook stops them (including every process the test run started) and warns you.
+- By default only the `test` script runs, not `test:e2e`, so a database that is not running does not cause failures.
+
+### format.cjs: Prettier
+
+Runs only on files inside the project, and only if Prettier is installed (in the file's package or a parent folder). It never downloads anything and never blocks Claude.
+
+NestJS sets up Prettier for you. In a Next.js or Vite project, install it yourself: `npm i -D prettier`.
+
+## The eight subagents
+
+Each agent's tool list decides what it can do. An agent without Edit and Write in its list cannot edit files at all.
+
+| Agent | Job | Edits files? | Runs commands? |
+|---|---|---|---|
+| `planner` | Reads the code and returns a file-by-file plan | ❌ | ❌ |
+| `builder` | Implements one plan step, with tests | ✅ | ✅ |
+| `reviewer` | Reviews only the diff for bugs, security holes and weak tests | ❌ | ✅ (by instruction: read-only git) |
+| `auditor` | Runs typecheck, lint, tests and build, and reports evidence | ❌ | ✅ |
+| `custodian` | Checks for duplicate code and architecture problems, then commits only the intended files | ❌ | ✅ (git) |
+| `investigator` | Finds the root cause of a bug and proves it with a reproduction | By instruction: only in `.claude/scratch/` | ✅ |
+| `architect` | Large work: designs, implements, and delegates | ✅ | ✅ |
+| `coordinator` | Writes no code itself; runs the whole team | ❌ | ❌ |
+
+"By instruction" means the rule is written in the agent's prompt, not enforced in code. The guard hook also applies to commands run by subagents, so destructive commands are still blocked.
+
+### Using them
+
+**From a normal session**, call any agent by name:
+
+```text
+Use the reviewer subagent to review my uncommitted changes
+Use the investigator to find out why login fails
+Use the planner to plan the payment module
+Use the custodian to commit this work
+```
+
+Claude also calls them on its own when a task matches an agent's description.
+
+**For large work, run the coordinator or architect as the main session:**
+
+```bash
+claude --agent coordinator    # writes no code; runs planner → builder → reviewer → custodian → auditor
+claude --agent architect      # writes code itself and delegates when useful
+```
+
+Do not call these two as ordinary subagents. A subagent in Claude Code can spawn other subagents, but they run in the background, and in testing the coordinator returned its report before its delegates had finished. As the main session, it completes the full ladder.
+
+With `--agent`, the agent's instructions replace Claude Code's default system prompt, and the session gets only that agent's tools.
+
+**In the VS Code extension** there is nowhere to pass `--agent`. The reliable way is to run `claude --agent coordinator` in the VS Code terminal. The alternative is to put `{"agent": "coordinator"}` in the project's `.claude/settings.local.json`. That works with the terminal `claude`; whether it works in the extension has not been verified. It also turns **every** session in that project into the coordinator, so remove it when you are done.
+
+**Cost:** every subagent is a separate model call. For small tasks (fixing one function), asking Claude directly is cheaper and faster. Use the ladder for large features or risky changes. To run an agent on a cheaper model, change `model: inherit` in its file to `model: sonnet` or `model: haiku`.
+
+## Customizing per project
+
+**To choose what verify runs,** add a `claude:verify` script to `package.json`:
 
 ```json
 "scripts": {
@@ -112,39 +168,54 @@ Claude কোড না বদলালে (শুধু প্রশ্নে�
 }
 ```
 
-| প্রজেক্ট | কখন দরকার | `claude:verify` |
+| Project | When you need it | `claude:verify` |
 |---|---|---|
-| NestJS | টেস্ট স্যুট ধীর হলে | `tsc --noEmit && jest --onlyChanged` |
-| Next.js | লিন্টও চালাতে চাইলে | `tsc --noEmit && next lint` |
-| React (Vite) | সবসময় দিন, কারণ Vite-এর `tsconfig.json`-এ শুধু references থাকে আর ডিফল্ট `tsc --noEmit` কিছু চেক করে না | `tsc -b && vitest run` |
-| Express (JS) | দরকার নেই | ডিফল্টে শুধু `test` script চলে |
+| NestJS | When the test suite is slow | `tsc --noEmit && jest --onlyChanged` |
+| Next.js | When you also want lint | `tsc --noEmit && next lint` |
+| React (Vite) | Always. Vite's `tsconfig.json` only holds references, so the default `tsc --noEmit` checks nothing | `tsc -b && vitest run` |
+| Express (JS) | Not needed | By default only the `test` script runs |
 
-- পুরো চেক ২৭০ সেকেন্ডের বেশি লাগলে hook চেকটা বন্ধ করে দেয় (টেস্টের সব process সহ) আর আপনাকে warning দেয়। তখন উপরের মতো দ্রুত একটা script দিন।
-- ডিফল্টে শুধু `test` script চলে, `test:e2e` না। তাই ডাটাবেস চালু না থাকলেও সমস্যা হয় না।
-- **কোনো কমান্ড guard-এ আটকে গেলে**, যেটা আসলে দরকার: কমান্ডটা নিজের টার্মিনালে চালান। অথবা প্রজেক্টের `.claude/hooks/guard.cjs` থেকে সেই লাইনটা মুছে দিন।
-- **Claude-কে `.env` পড়তে দিতে চাইলে:** `settings.json`-এর `permissions.deny` থেকে লাইনগুলো সরান, আর `guard.cjs`-এর "Secrets" লাইনটা মুছুন।
+**To let Claude read `.env`,** remove the lines from `permissions.deny` in `settings.json` and delete the two lines under "Secrets" in `guard.cjs`.
 
-## সীমাবদ্ধতা
-- `guard.cjs` একটা নিরাপত্তা জাল, পুরোপুরি নিশ্চিত সুরক্ষা না। কমান্ড কোনো script ফাইলের ভেতরে লুকানো থাকলে (যেমন `npm run reset-db` বা `node scripts/wipe.js`) এটা ধরতে পারবে না। আসল সুরক্ষা হলো production ডাটাবেসের credential লোকাল `.env`-এ না রাখা।
-- verify শুধু Claude-এর Edit/Write টুলের এডিট ধরে। Claude যদি shell কমান্ড দিয়ে (যেমন `sed`) কোড বদলায়, সেটা ধরা পড়ে না।
-- `.env`-এর deny rule নির্দিষ্ট নাম ধরে লেখা (`.env`, `.env.local`, `.env.development`, `.env.production`, `.env.staging`, `.env.test`, `.env.*.local`)। অন্য নামের secret ফাইল থাকলে `settings.json`-এ যোগ করুন।
+## Limitations
 
-- agent-দের read-only হওয়া tool-এর তালিকা দিয়ে নিশ্চিত করা। কিন্তু reviewer, auditor আর custodian-এর Bash আছে, আর "শুধু পড়ার কমান্ড চালাও" নিয়মটা prompt-এ লেখা, কোড দিয়ে চাপানো না। guard hook subagent-এর কমান্ডেও চলে, তাই বিপজ্জনক কমান্ড তখনও আটকায়।
+- **The guard is a safety net, not a sandbox.** It cannot see a command hidden inside a script file (such as `npm run reset-db` or `node scripts/wipe.js`). A folder-wide search like `grep -r KEY .` can still print lines from `.env`. The real protection is not keeping production credentials in a local `.env`.
+- **verify only sees edits made with Claude's Edit and Write tools.** If Claude changes code with a shell command (such as `sed -i`), the change is not noticed and no checks run.
+- **The fence does not guarantee a fix.** See above.
+- **The `.env` deny rules list specific names:** `.env`, `.env.local`, `.env.development`, `.env.production`, `.env.staging`, `.env.test`, `.env.*.local`. Add any other secret files to `settings.json`.
+- **Agents make mistakes.** In testing (on the haiku model) the coordinator once sent the same task to the builder twice, and once started the reviewer before the builder had finished. The end result was correct both times because the fence and the review caught the problem.
+- **The coordinator's todo tool:** its tool list names todo and question tools, but which of them an interactive session really provides could not be verified. Without one, the coordinator keeps its checklist in its replies.
 
-- agent-রা ভুল করতে পারে। টেস্টে (haiku মডেলে) coordinator একবার একই কাজ দুবার builder-কে দিয়েছে, আরেকবার builder শেষ হওয়ার আগেই reviewer চালু করেছে। দুবারই শেষ ফলাফল ঠিক ছিল, কারণ fence আর review ভুলটা ধরেছে। বড় model-এ এটা কতটা কম হয় তা টেস্ট করা হয়নি।
-- coordinator-এর tool তালিকায় todo আর প্রশ্ন করার tool-এর নাম আছে। interactive session-এ এগুলোর কোনটা সত্যিই পাওয়া যায় তা যাচাই করা যায়নি (headless মোডে এগুলো থাকেই না)। না পেলে coordinator উত্তরের ভেতরেই checklist রাখে।
+## What was tested
 
-## যাচাই
-Windows-এ Claude Code 2.1.300 আর Node 24 দিয়ে আসল সেশনে টেস্ট করা হয়েছে (সব টেস্ট haiku মডেলে, headless `claude -p` মোডে):
-- **Hook:** guard কমান্ড আটকেছে, format ফাইল ঠিক করেছে, verify টাইপ error ধরে Claude-কে দিয়ে ঠিক করিয়েছে। `.env` পড়া আটকেছে, কিন্তু `.env.example` পড়া গেছে।
-- **subagent-এর উপর hook:** subagent-এর কমান্ডেও guard চলে (`git clean -fd` আটকেছে)। subagent-এর এডিটও fence ধরে, কারণ session id একই থাকে।
-- **tool restriction:** reviewer-এর কাছে শুধু `Read, Grep, Glob, Bash` থাকে। `--agent coordinator` session শুধু agent চালু করা আর পড়ার tool পায়।
-- **reviewer:** ইচ্ছে করে ঢোকানো ৩টা bug-ই ধরেছে (`await` বাদ, password hash ফাঁস, অসীম cache), ফাইলে হাত দেয়নি।
-- **coordinator** (`--agent`): নিজে কোড না লিখে builder → reviewer → auditor চালিয়েছে, দুটো আলাদা কাজে। দুবারই টেস্ট পাস।
-- **coordinator subagent হিসেবে:** ladder শেষ করতে পারেনি (উপরে ব্যাখ্যা আছে)। তাই এভাবে ব্যবহার করতে মানা।
-- **custodian:** শুধু দুটো দরকারি ফাইল commit করেছে, `debug.log` আর scratch বাদ দিয়েছে, conventional commit message দিয়েছে।
-- **investigator:** ms বনাম seconds bug-এর আসল কারণ বের করেছে। scratch-এ repro বানিয়েছে, product কোডে হাত দেয়নি।
-- **planner:** ঠিক format-এ plan আর open question দিয়েছে, কোনো ফাইল বদলায়নি।
-- **architect:** subagent হিসেবে planner-কে চালু করতে পেরেছে, কিন্তু উত্তর আসার আগেই রিপোর্ট দিয়েছে। মূল session হিসেবে (`--agent architect`) টেস্ট করা হয়নি।
+Tested on Windows 11 with Claude Code 2.1.300, Node 24, TypeScript 7 and Prettier 3.
 
-যা টেস্ট করা হয়নি: VS Code extension-এর ভেতরে (সব টেস্ট টার্মিনালের `claude` দিয়ে), আসল NestJS প্রজেক্টে jest-এর বড় টেস্ট স্যুট, macOS/Linux, আর haiku ছাড়া অন্য model।
+**Scripted tests:**
+
+- guard: 153 commands (76 that must be blocked, 77 that must be allowed), all correct
+- verify: single-package and monorepo projects, the commit gate, timeouts, large output and malformed input
+- format: file names with spaces, files outside the project and `node_modules`
+- installer: fresh install, re-run, merge and `--force` upgrade
+
+**Real Claude Code sessions** (haiku model, headless `claude -p` mode):
+
+- The guard blocked commands in both the main session and a subagent.
+- verify caught a type error and made Claude fix it. In a monorepo it ran in the right package.
+- The commit gate blocked a commit of broken code. Claude stopped and asked for a decision.
+- A commit whose message mentions `.env` was not blocked.
+- Reading `.env` was denied; reading `.env.example` worked.
+- The reviewer found all 3 deliberately planted bugs, and had only `Read, Grep, Glob, Bash`.
+- The coordinator (`--agent`) ran builder → reviewer → auditor on two separate tasks without writing code itself.
+- The custodian committed only the intended files. The investigator found the real cause without touching product code. The planner returned a plan in the expected format.
+
+**Not tested:**
+
+- Inside the VS Code extension (every test used the terminal `claude`)
+- macOS and Linux
+- A real NestJS project with a large jest suite
+- Models other than haiku
+- The architect as the main session (`--agent architect`)
+
+## Credits
+
+The ideas (command safety, the completion fence, keeping output short, the eight agent roles) come from [agyis-harness](https://github.com/kuasha420/agyis-harness), a harness for Google Antigravity by Arafat Zahan / Purrfect Software Limited, licensed Apache-2.0. The code and agent instructions in this template were written from scratch for Claude Code.
