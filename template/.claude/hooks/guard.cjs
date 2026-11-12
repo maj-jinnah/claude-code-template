@@ -27,16 +27,19 @@ const ALWAYS = [
   // --- Git ---
   [/git\s+push\b[^;&|]*(--force(?!-with-lease|-if-includes)|\s-f\b|\s\+[\w\/.-]+)/, 'force push rewrites remote history (use --force-with-lease if really needed)'],
   [/git\s+reset\s+--hard/, 'git reset --hard throws away uncommitted work'],
-  [/git\s+clean\s+-[a-zA-Z]*f/, 'git clean -f deletes untracked files'],
+  [/git\s+clean\b[^;&|]*\s(-[a-zA-Z]*f[a-zA-Z]*|--force)(?=\s|$)/, 'git clean -f deletes untracked files'],
   [/git\s+checkout\s+(--\s+)?\.(\s|$)/, 'git checkout . throws away uncommitted work'],
   [/git\s+restore\s+(--\s+)?\.(\s|$)/, 'git restore . throws away uncommitted work'],
 
   // --- Filesystem: recursive delete of / ~ * . .. (and /* ~/ ./* etc.) ---
-  [/\brm\s+(?:-\S+\s+)*(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\s+(?:-\S+\s+)*(?:\/\*?|~\/?\*?|\*|\.{1,2}\/?\*?)(?:\s|$)/, 'recursive delete of root / home / current folder'],
+  [/\brm\s+(?:-\S+\s+)*(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\s+(?:-\S+\s+)*(?:\/\*?|~\/?\*?|["']?\$\{?HOME\}?["']?\/?\*?|\*|\.{1,2}\/?\*?)(?:\s|$)/, 'recursive delete of root / home / current folder'],
   [/Remove-Item\b(?=[^;|]*-Recurse\b)[^;|]*\s(?:\.{1,2}[\\\/]?\*?|\*|~[\\\/]?\*?|[A-Za-z]:[\\\/]?\*?)(?:\s|$)/i, 'recursive delete of drive / home / current folder'],
 
   // --- Secrets: printing real .env files (.env.example is fine) ---
   [/\b(cat|less|more|head|tail|bat|type|Get-Content|gc)\s+[^;&|]*\.env(?:\.(?!example|sample|template|dist|defaults)[\w.-]+)?(?=\s|$|["'])/i, 'printing a .env file exposes secrets (read .env.example instead)'],
+  // search/stream tools: only when a .env file is the LAST argument (the file being read),
+  // so `grep -rn "process.env" src` and `grep .env .gitignore` stay allowed
+  [/\b(grep|egrep|fgrep|rg|sed|awk|nl|tac|sort|cut|strings|xxd|findstr|Select-String|sls)\b[^;&|]*(?<!\w)(?<!["'\s]\\)\.env(?:\.(?!example|sample|template|dist|defaults)[\w.-]+)?(?=["']?\s*(?:$|[;&|]))/i, 'reading a .env file exposes secrets (read .env.example instead)'],
 
   // --- Publishing ---
   [/\b(npm|pnpm|yarn|bun)\s+publish\b/, 'publishing a package'],
@@ -62,8 +65,16 @@ try {
   process.exit(0);
 }
 
-const cmd = String((input.tool_input && input.tool_input.command) || '');
-if (!cmd) process.exit(0);
+// Commit messages and PR / issue text are prose, not commands. Claude usually passes them as
+//   git commit -m "$(cat <<'EOF' ... EOF)"
+// so that text is removed before matching: a message that merely MENTIONS `.env` or
+// `git reset --hard` must not be blocked. Everything after the next `&&`, `;` or `|` is still checked.
+const PROSE =
+  /\b(?:git\s+(?:commit|tag)|gh\s+(?:pr|issue|release)\s+\w+)\b(?:(?:"[^"\n]*"|'[^'\n]*'|[^;&|\n])*?<<-?\s*['"]?(\w+)['"]?[\s\S]*?\n[ \t]*\1\b[^;&|\n]*|(?:"[^"]*"|'[^']*'|[^;&|\n])*)/g;
+
+const raw = String((input.tool_input && input.tool_input.command) || '');
+if (!raw) process.exit(0);
+const cmd = raw.replace(PROSE, ' <text> ');
 
 const rules = DB_CONTEXT.test(cmd) ? [...ALWAYS, ...DB_ONLY] : ALWAYS;
 
