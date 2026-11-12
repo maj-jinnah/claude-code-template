@@ -52,7 +52,7 @@ Copy the real scripts from this project's `package.json`. Delete rows that do no
 
 ## Guardrails already active (see .claude/)
 - Destructive DB / git / delete commands are blocked by a hook. If one is blocked, do not work around it — ask me to run it.
-- After you edit code, typecheck and tests run automatically when you finish. If they fail you must fix them.
+- After you edit code, typecheck and tests run automatically before `git commit` and when you finish. If they fail, the commit is blocked and you must fix them. Do not use `--no-verify` unless I ask for it.
 - Edited files are auto-formatted with Prettier (if the project has it), so a file may differ slightly from what you wrote.
 
 ## Specialist subagents (.claude/agents/)
