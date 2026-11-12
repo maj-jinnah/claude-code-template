@@ -40,7 +40,8 @@ node /path/to/claude-code-template/install.cjs /path/to/your-project
 From inside the project folder, pass `.` as the target.
 
 - It never deletes or overwrites your files.
-- If `.claude/settings.json` already exists, it is **merged**. Your own hooks and permissions stay, and the original is kept as `settings.json.bak`.
+- If `.claude/settings.json` already exists, it is **merged**. Your own hooks and permissions stay, and the previous version is kept as `settings.json.bak` (a later change adds a dated `.bak` and never overwrites an older one).
+- If the existing `settings.json` is broken, the installer stops with a clear error **before** copying anything.
 - An existing `CLAUDE.md` is left untouched.
 - Running it a second time changes nothing.
 
@@ -59,7 +60,7 @@ Add `--force`:
 node /path/to/claude-code-template/install.cjs /path/to/your-project --force
 ```
 
-This updates the template's hook and agent files and its entries in `settings.json`. If a file in the project differs from the template (for example, you edited it), the previous version is kept as `<name>.bak`. Your own hooks and your `CLAUDE.md` are not touched.
+This updates the template's hook and agent files and its entries in `settings.json`. If a file in the project differs from the template (for example, you edited it), the previous version is kept as `<name>.bak`; a later `--force` keeps that file and adds a dated one, so a customised hook is never lost. Your own hooks and your `CLAUDE.md` are not touched. Note that `--force` resets this template's own entries in `settings.json` (for example a timeout you changed) to the template's values.
 
 ## How the hooks work
 
@@ -67,20 +68,21 @@ This updates the template's hook and agent files and its entries in `settings.js
 
 Blocked:
 
-- **ORMs:** `prisma migrate reset`, `prisma db push --force-reset` / `--accept-data-loss`, `typeorm schema:drop`, `sequelize db:drop`
-- **SQL / Mongo / Redis:** `DROP DATABASE/TABLE/SCHEMA`, `TRUNCATE`, `DELETE FROM` without `WHERE`, `dropDatabase()`, `collection.drop()`, `deleteMany({})`, `FLUSHALL` / `FLUSHDB`
-- **Docker:** `docker compose down -v`, `docker volume rm` / `prune`
-- **Git:** `git push --force` / `-f` / `+branch`, `git reset --hard`, `git clean -f`, `git checkout .`, `git restore .`
-- **Files:** `rm -rf` on `/`, `~`, `$HOME`, `.`, `..` or `*`, and the same with PowerShell's `Remove-Item -Recurse`
-- **Processes by name:** `taskkill /IM node.exe`, `killall node`, `pkill node`, `Stop-Process -Name node`, `kill $(pgrep node)` and similar. These stop every matching process on the machine, including other projects' dev servers. The block message tells Claude how to stop only the process on the port instead.
-- **Secrets:** printing or reading a real `.env` file: `cat .env`, `grep KEY .env`, `sed -n p .env` and similar. `.env.example` is allowed.
-- **Publishing:** `npm` / `pnpm` / `yarn` / `bun publish`
+- **ORMs:** `prisma migrate reset`, `prisma db push --force-reset` / `--accept-data-loss`, `typeorm schema:drop`, `sequelize db:drop`, `mikro-orm schema:drop`
+- **SQL / Mongo / Redis:** `DROP DATABASE/TABLE/SCHEMA`, `TRUNCATE`, `DELETE FROM` without `WHERE`, `dropDatabase()`, `collection.drop()`, `deleteMany({})`, `remove({})`, `FLUSHALL` / `FLUSHDB`, and the `dropdb` / `mysqladmin drop` tools
+- **Docker:** `docker compose down -v`, `docker volume rm` / `prune`, `docker system prune --volumes`
+- **Git:** `git push --force` / `-f` / `+branch`, `git reset --hard`, `git clean -f`, `git checkout .` (also `git checkout HEAD -- .`), `git restore .` (also with `--worktree`). Flags in any order and git's global options are handled: `git -C apps/api reset --hard` and `git reset HEAD~1 --hard` are blocked too.
+- **Files:** `rm -rf` on `/`, `~`, `$HOME`, `$PWD`, `.`, `..`, `../..` or `*`; the same with PowerShell's `Remove-Item -Recurse` (also on `$HOME` and `$env:USERPROFILE`) and cmd's `rmdir /s` / `rd /s`; deleting `.git` (`rm -rf .git`), which would lose every commit that was never pushed
+- **Processes by name:** `taskkill /IM node.exe`, `killall node`, `pkill node`, `Stop-Process -Name node`, `Get-Process node | Stop-Process`, `kill $(pgrep node)`, `ps aux | grep node | xargs kill` and similar, also behind `sudo`, `bash -c "..."`, `cmd /c` or `powershell -Command`. These stop every matching process on the machine, including other projects' dev servers. The block message tells Claude how to stop only the process on the port instead.
+- **Secrets:** reading a real `.env` file with a command: `cat .env`, `grep KEY .env 2>/dev/null`, `sed -n p .env`, `rg X -g '.env*'`, `docker compose exec api cat .env`, `... < .env` and similar. `.env.example` is allowed.
+- **Publishing:** `npm` / `pnpm` / `yarn` / `bun publish`, `pnpm -r publish`, `changeset publish` (a `--dry-run` is allowed)
 
 Not blocked:
 
 - Safe variants: `prisma migrate dev`, `git push --force-with-lease`, `rm -rf dist`, `docker compose down`, `DELETE` with a `WHERE`.
 - Stopping one process: `taskkill /PID 1234 /F`, `kill 1234`, `Stop-Process -Id 1234`, `npx kill-port 3000`, `lsof -ti :3000 | xargs kill`, and `pkill -f "node dist/main.js"` (a specific command line).
-- The text of commit messages, tags, and PR or issue bodies. A commit whose message mentions `.env` or `git reset --hard` goes through.
+- The text of commit messages, tags, and PR or issue bodies, in bash heredocs and in PowerShell here-strings (`@'...'@`). A commit whose message mentions `.env` or `git reset --hard` goes through.
+- Commands where `.env` is only a search word or is written, not read: `ls -la | grep .env`, `git ls-files | grep .env`, `cp .env.example .env`.
 - Commands that only mention a dangerous command: `grep -rn "git reset --hard" docs`, `echo "never run killall node"`, `which pkill`, `man killall`. Quoted text in search and print commands is ignored, unless `echo`/`printf` is piped into another program (`echo "DROP TABLE x" | psql` is blocked). Process rules only match a program in command position.
 - Searches such as `grep -rn "process.env" src` or `grep "DROP TABLE" migrations`. SQL keywords are only checked when the command actually runs a database client or `node`.
 
@@ -89,14 +91,14 @@ If a blocked command is genuinely needed, run it in your own terminal, or delete
 ### verify.cjs: completion fence and commit gate
 
 1. When Claude edits a `.ts/.tsx/.js/.jsx` file inside the project, the hook records that code changed, and which package the file belongs to (the nearest `package.json`).
-2. **Commit gate:** if Claude runs `git commit` while changed code is unverified, the checks run first. If they fail, the commit is blocked. To skip the gate on purpose, use `git commit --no-verify`, the same flag that skips git's own hooks.
+2. **Commit gate:** if Claude runs `git commit` while changed code is unverified, the checks run first. If they fail, the commit is blocked. To skip the gate on purpose, use `git commit --no-verify` (or `-n`), the same flag that skips git's own hooks. Only a real `git commit` command triggers the gate: `grep "git commit" docs` does not, and `--no-verify` inside the commit message does not skip it.
 3. **Completion fence:** when Claude tries to finish, the same checks run. If they pass, Claude stops. If they fail, the tail of the error is shown to Claude and it is sent back to work.
 4. If Claude stops again without changing code (for example, it needs a decision from you), or the checks still fail after 3 fix attempts, the hook lets it go and **shows you a warning** ("Stop says: verify hook: ..."). It can never loop forever.
 
 **Which checks run:**
 
 - `tsc --noEmit`, if the package has a `tsconfig.json` and TypeScript is installed
-- the `test` script, if `package.json` has one (run with npm, pnpm, yarn or bun, detected from the lock file)
+- the `test` script, if `package.json` has one (run with npm, pnpm, yarn or bun, detected from the lock file). If that package manager is not installed on this machine, the check is skipped and you get a warning, instead of Claude being told the tests fail.
 - if `package.json` has a `claude:verify` script, **only that script** runs instead of the two above
 
 **What this guarantees and what it does not:** the fence guarantees that Claude sees the failure, that broken code is not committed, and that you get a warning. It does not guarantee the code gets fixed. When you see the warning, check for yourself.
@@ -178,7 +180,7 @@ With `--agent`, the agent's instructions replace Claude Code's default system pr
 | React (Vite) | Always. Vite's `tsconfig.json` only holds references, so the default `tsc --noEmit` checks nothing | `tsc -b && vitest run` |
 | Express (JS) | Not needed | By default only the `test` script runs |
 
-**To let Claude read `.env`,** remove the lines from `permissions.deny` in `settings.json` and delete the two lines under "Secrets" in `guard.cjs`.
+**To let Claude read `.env`,** remove the lines from `permissions.deny` in `settings.json` and delete the line starting with `if (splitCommands(cmd).some(readsEnv))` near the end of `guard.cjs`.
 
 ## Keeping it working
 
@@ -188,7 +190,7 @@ Run the self-test from the template folder after you update Node or Claude Code,
 node test/selftest.cjs
 ```
 
-It runs 271 checks on the hooks, the installer and the agent files in a temporary folder, with no network and no model calls, and ends with `OK` or a list of failures.
+It runs 412 checks on the hooks, the installer and the agent files in a temporary folder, with no network and no model calls, and ends with `OK` or a list of failures.
 
 The self-test calls the hook scripts directly, so it cannot notice a change in Claude Code itself. For that, open a new session in a project that has the template and ask Claude to run `git reset --hard`. If the guard blocks it, the hooks are wired up correctly.
 
@@ -204,7 +206,7 @@ Every hook is written to fail open: if it cannot read its input or crashes, it l
 
 ## Limitations
 
-- **The guard is a safety net, not a sandbox.** It cannot see a command hidden inside a script file (such as `npm run reset-db` or `node scripts/wipe.js`). A folder-wide search like `grep -r KEY .` can still print lines from `.env`. The real protection is not keeping production credentials in a local `.env`.
+- **The guard is a safety net, not a sandbox.** It catches the usual ways of running a dangerous command by mistake, not a command written to get around it. It cannot see a command hidden inside a script file (such as `npm run reset-db` or `node scripts/wipe.js`), or a program that reads `.env` itself (`node -e "...readFileSync('.env')"`, `git show HEAD:.env`). A folder-wide search like `grep -r KEY .` can still print lines from `.env`. The real protection is not keeping production credentials in a local `.env`.
 - **verify only sees edits made with Claude's Edit and Write tools.** If Claude changes code with a shell command (such as `sed -i`), the change is not noticed and no checks run.
 - **The fence does not guarantee a fix.** See above.
 - **The `.env` deny rules list specific names:** `.env`, `.env.local`, `.env.development`, `.env.production`, `.env.staging`, `.env.test`, `.env.*.local`. Add any other secret files to `settings.json`.
@@ -215,12 +217,16 @@ Every hook is written to fail open: if it cannot read its input or crashes, it l
 
 Tested on Windows 11 with Claude Code 2.1.300, Node 24, TypeScript 7 and Prettier 3.
 
-**Scripted tests** (`node test/selftest.cjs`, 271 checks, all passing):
+**Scripted tests** (`node test/selftest.cjs`, 412 checks, all passing):
 
-- guard: 235 commands (119 that must be blocked, 116 that must be allowed)
-- verify: single-package and monorepo projects, the commit gate, the 3-attempt limit, timeouts and malformed input
-- installer: fresh install, re-run, merge with your own settings, and `--force` with `.bak` backups
+- guard: 354 commands (186 that must be blocked, 168 that must be allowed, including everyday commands such as `npm install`, `git stash` and `rm -rf node_modules`), and long commands to make sure it stays fast (under 100 ms)
+- verify: single-package and monorepo projects, the commit gate (including commands that only mention `git commit`), the 3-attempt limit, a package manager that is not installed, timeouts and malformed input
+- installer: fresh install, re-run, merge with your own settings, `--force` with `.bak` backups (a second `--force` keeps the first backup), a `settings.json` with a BOM, and a broken `settings.json`
+
+An independent review (a separate agent that tried to break the template without seeing earlier results) found gaps in the guard, verify and the installer. Every confirmed finding was fixed and added to the self-test.
 - agent files: valid frontmatter
+
+**On Linux** (Ubuntu 24.04 on WSL2, Node 24, bash 5.2): the full self-test passed (397/397, the version before the `.git` rule was added), and so did extra checks for Linux-style commands (`sudo rm -rf /`, `pkill -f node`, `kill -9 <pid>`, `lsof -ti :3000 | xargs kill`), installing into a path with a space, and running the hook command exactly as written in `settings.json` through bash.
 
 Tested separately during development: Prettier formatting with real Prettier (nested folders, file names with spaces, files outside the project and `node_modules`) and verify with large test output.
 
@@ -239,7 +245,7 @@ Tested separately during development: Prettier formatting with real Prettier (ne
 
 - Claude stopping a single process by PID in a real session (blocking by name was tested live)
 - Inside the VS Code extension (every test used the terminal `claude`)
-- macOS and Linux
+- macOS, and real Claude Code sessions on Linux (the self-test and the hook command passed on Linux, see below)
 - A real NestJS project with a large jest suite
 - Models other than haiku
 - The architect as the main session (`--agent architect`)

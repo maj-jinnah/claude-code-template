@@ -40,7 +40,8 @@ node "d:/learning project/claude-code-template/install.cjs" "d:/learning project
 প্রজেক্টের ফোল্ডারের ভেতর থেকে চালালে শেষে শুধু `.` দিলেই হয়।
 
 - আপনার কোনো ফাইল মুছে ফেলে না বা overwrite করে না।
-- আগে থেকে `.claude/settings.json` থাকলে **merge** করে। আপনার নিজের hook আর permission থেকে যায়, আর আসল ফাইলটা `settings.json.bak` নামে রাখা হয়।
+- আগে থেকে `.claude/settings.json` থাকলে **merge** করে। আপনার নিজের hook আর permission থেকে যায়, আর আগের ফাইলটা `settings.json.bak` নামে রাখা হয় (পরে আবার বদলালে তারিখসহ নতুন `.bak` হয়, পুরনোটা মোছে না)।
+- আগের `settings.json` ভাঙা থাকলে installer কোনো ফাইল কপি করার **আগেই** পরিষ্কার error দিয়ে থেমে যায়।
 - আগে থেকে `CLAUDE.md` থাকলে সেটা ছোঁয় না।
 - দ্বিতীয়বার চালালে কিছুই বদলায় না।
 
@@ -59,7 +60,7 @@ node "d:/learning project/claude-code-template/install.cjs" "d:/learning project
 node "d:/learning project/claude-code-template/install.cjs" "<project>" --force
 ```
 
-এতে টেমপ্লেটের hook আর agent ফাইল, আর settings-এ এই টেমপ্লেটের এন্ট্রিগুলো বদলায়। প্রজেক্টের কোনো ফাইল টেমপ্লেট থেকে আলাদা হলে (যেমন আপনি নিজে বদলেছেন) আগেরটা `<নাম>.bak` হিসেবে থেকে যায়। আপনার নিজের hook আর `CLAUDE.md` যেমন আছে তেমনই থাকে।
+এতে টেমপ্লেটের hook আর agent ফাইল, আর settings-এ এই টেমপ্লেটের এন্ট্রিগুলো বদলায়। প্রজেক্টের কোনো ফাইল টেমপ্লেট থেকে আলাদা হলে (যেমন আপনি নিজে বদলেছেন) আগেরটা `<নাম>.bak` হিসেবে থেকে যায়। পরে আবার `--force` দিলে সেটা থেকে যায় আর তারিখসহ নতুন একটা `.bak` হয়, তাই আপনার নিজের বদলানো hook কখনো হারায় না। আপনার নিজের hook আর `CLAUDE.md` যেমন আছে তেমনই থাকে। তবে `--force` দিলে `settings.json`-এ এই টেমপ্লেটের নিজের এন্ট্রিগুলো (যেমন আপনার বদলানো timeout) টেমপ্লেটের মানে ফিরে যায়।
 
 ## Hook-গুলো কীভাবে কাজ করে
 
@@ -67,20 +68,21 @@ node "d:/learning project/claude-code-template/install.cjs" "<project>" --force
 
 যা আটকায়:
 
-- **ORM:** `prisma migrate reset`, `prisma db push --force-reset` / `--accept-data-loss`, `typeorm schema:drop`, `sequelize db:drop`
-- **SQL / Mongo / Redis:** `DROP DATABASE/TABLE/SCHEMA`, `TRUNCATE`, WHERE ছাড়া `DELETE FROM`, `dropDatabase()`, `collection.drop()`, `deleteMany({})`, `FLUSHALL` / `FLUSHDB`
-- **Docker:** `docker compose down -v`, `docker volume rm` / `prune`
-- **Git:** `git push --force` / `-f` / `+branch`, `git reset --hard`, `git clean -f`, `git checkout .`, `git restore .`
-- **ফাইল:** `rm -rf` দিয়ে `/`, `~`, `$HOME`, `.`, `..`, `*` মোছা, আর PowerShell-এর `Remove-Item -Recurse` দিয়ে একই কাজ
-- **নাম ধরে process বন্ধ করা:** `taskkill /IM node.exe`, `killall node`, `pkill node`, `Stop-Process -Name node`, `kill $(pgrep node)` ইত্যাদি। এগুলো মেশিনের **সব** মিলে যাওয়া process বন্ধ করে, অন্য প্রজেক্টের dev server-সহ। আটকানোর বার্তায় Claude-কে বলা হয় কীভাবে শুধু port-এর process বন্ধ করতে হয়।
-- **Secret:** আসল `.env` ফাইল ছাপানো বা পড়া: `cat .env`, `grep KEY .env`, `sed -n p .env` ইত্যাদি। `.env.example` পড়া যায়।
-- **Publish:** `npm` / `pnpm` / `yarn` / `bun publish`
+- **ORM:** `prisma migrate reset`, `prisma db push --force-reset` / `--accept-data-loss`, `typeorm schema:drop`, `sequelize db:drop`, `mikro-orm schema:drop`
+- **SQL / Mongo / Redis:** `DROP DATABASE/TABLE/SCHEMA`, `TRUNCATE`, WHERE ছাড়া `DELETE FROM`, `dropDatabase()`, `collection.drop()`, `deleteMany({})`, `remove({})`, `FLUSHALL` / `FLUSHDB`, আর `dropdb` / `mysqladmin drop` টুল
+- **Docker:** `docker compose down -v`, `docker volume rm` / `prune`, `docker system prune --volumes`
+- **Git:** `git push --force` / `-f` / `+branch`, `git reset --hard`, `git clean -f`, `git checkout .` (আর `git checkout HEAD -- .`), `git restore .` (আর `--worktree` সহ)। flag যেকোনো ক্রমে থাকুক বা git-এর global option থাকুক, ধরা পড়ে: `git -C apps/api reset --hard` আর `git reset HEAD~1 --hard`-ও আটকায়।
+- **ফাইল:** `rm -rf` দিয়ে `/`, `~`, `$HOME`, `$PWD`, `.`, `..`, `../..`, `*` মোছা; PowerShell-এর `Remove-Item -Recurse` দিয়ে একই কাজ (`$HOME` আর `$env:USERPROFILE`-সহ), আর cmd-এর `rmdir /s` / `rd /s`; `.git` মোছা (`rm -rf .git`), যাতে push না করা সব commit হারিয়ে যায়
+- **নাম ধরে process বন্ধ করা:** `taskkill /IM node.exe`, `killall node`, `pkill node`, `Stop-Process -Name node`, `Get-Process node | Stop-Process`, `kill $(pgrep node)`, `ps aux | grep node | xargs kill` ইত্যাদি, `sudo`, `bash -c "..."`, `cmd /c` বা `powershell -Command`-এর ভেতরে থাকলেও। এগুলো মেশিনের **সব** মিলে যাওয়া process বন্ধ করে, অন্য প্রজেক্টের dev server-সহ। আটকানোর বার্তায় Claude-কে বলা হয় কীভাবে শুধু port-এর process বন্ধ করতে হয়।
+- **Secret:** কমান্ড দিয়ে আসল `.env` ফাইল পড়া: `cat .env`, `grep KEY .env 2>/dev/null`, `sed -n p .env`, `rg X -g '.env*'`, `docker compose exec api cat .env`, `... < .env` ইত্যাদি। `.env.example` পড়া যায়।
+- **Publish:** `npm` / `pnpm` / `yarn` / `bun publish`, `pnpm -r publish`, `changeset publish` (`--dry-run` চলে)
 
 যা আটকায় না:
 
 - নিরাপদ কমান্ড: `prisma migrate dev`, `git push --force-with-lease`, `rm -rf dist`, `docker compose down`, WHERE সহ `DELETE`।
 - একটা নির্দিষ্ট process বন্ধ করা: `taskkill /PID 1234 /F`, `kill 1234`, `Stop-Process -Id 1234`, `npx kill-port 3000`, `lsof -ti :3000 | xargs kill`, আর `pkill -f "node dist/main.js"` (নির্দিষ্ট কমান্ড)।
-- commit message, tag আর PR/issue-র লেখা। message-এ `.env` বা `git reset --hard` শব্দ থাকলে commit আটকায় না।
+- commit message, tag আর PR/issue-র লেখা, bash heredoc-এ হোক বা PowerShell here-string-এ (`@'...'@`)। message-এ `.env` বা `git reset --hard` শব্দ থাকলে commit আটকায় না।
+- যেখানে `.env` শুধু খোঁজার শব্দ বা লেখা হচ্ছে, পড়া হচ্ছে না: `ls -la | grep .env`, `git ls-files | grep .env`, `cp .env.example .env`।
 - যে কমান্ড বিপজ্জনক কমান্ডের শুধু নাম উল্লেখ করে: `grep -rn "git reset --hard" docs`, `echo "never run killall node"`, `which pkill`, `man killall`। খোঁজা আর ছাপার কমান্ডের quote-এর ভেতরের লেখা উপেক্ষা করা হয়। তবে `echo`/`printf`-এর output অন্য program-এ pipe করলে উপেক্ষা হয় না, তাই `echo "DROP TABLE x" | psql` আটকায়। process-এর নিয়ম শুধু তখনই খাটে যখন program-টা কমান্ড হিসেবে চলছে।
 - `grep -rn "process.env" src` বা `grep "DROP TABLE" migrations`-এর মতো খোঁজাখুঁজি। SQL-এর শব্দ শুধু তখনই ধরা হয় যখন কমান্ডটা সত্যিই ডাটাবেস client বা `node` চালায়।
 
@@ -89,14 +91,14 @@ node "d:/learning project/claude-code-template/install.cjs" "<project>" --force
 ### verify.cjs: completion fence আর commit gate
 
 1. Claude প্রজেক্টের ভেতরে কোনো `.ts/.tsx/.js/.jsx` ফাইল এডিট করলে hook মনে রাখে "কোড বদলেছে", আর ফাইলটা কোন package-এর (সবচেয়ে কাছের `package.json`)।
-2. **Commit gate:** কোড বদলানো থাকা অবস্থায় Claude `git commit` করতে গেলে আগে চেক চলে। fail করলে commit আটকে যায়। ইচ্ছে করে চেক বাদ দিতে চাইলে `git commit --no-verify` ব্যবহার করুন, git-এর নিজের hook-এর মতোই।
+2. **Commit gate:** কোড বদলানো থাকা অবস্থায় Claude `git commit` করতে গেলে আগে চেক চলে। fail করলে commit আটকে যায়। ইচ্ছে করে চেক বাদ দিতে চাইলে `git commit --no-verify` (বা `-n`) ব্যবহার করুন, git-এর নিজের hook-এর মতোই। শুধু আসল `git commit` কমান্ডেই gate চালু হয়: `grep "git commit" docs`-এ হয় না, আর commit message-এর ভেতরে `--no-verify` লেখা থাকলেও gate বাদ যায় না।
 3. **Completion fence:** Claude কাজ শেষ করতে গেলে একই চেক চলে। পাস করলে Claude থামে। fail করলে error-এর শেষ অংশ Claude-কে দেখানো হয়, আর তাকে কাজে ফেরত পাঠানো হয়।
 4. Claude যদি কোড না বদলে আবার থামে (যেমন আপনার সিদ্ধান্ত দরকার), বা ৩ বার চেষ্টার পরও fail করে, তখন hook তাকে ছেড়ে দেয় আর **আপনাকে একটা warning দেখায়** ("Stop says: verify hook: ...")। তাই কখনো অনন্ত লুপ হয় না।
 
 **কী চেক চলে:**
 
 - package-এ `tsconfig.json` থাকলে আর TypeScript ইনস্টল থাকলে `tsc --noEmit`
-- `package.json`-এ `test` script থাকলে সেটা (npm, pnpm, yarn বা bun, lock ফাইল দেখে ঠিক হয়)
+- `package.json`-এ `test` script থাকলে সেটা (npm, pnpm, yarn বা bun, lock ফাইল দেখে ঠিক হয়)। সেই package manager এই মেশিনে ইনস্টল না থাকলে চেকটা বাদ যায় আর আপনাকে সতর্কবার্তা দেখায়; Claude-কে "test fail" বলা হয় না।
 - `package.json`-এ `claude:verify` script থাকলে উপরের দুটোর বদলে **শুধু সেটা**
 
 **এটা কী নিশ্চিত করে আর কী করে না:** fence নিশ্চিত করে যে Claude error-টা দেখবে, ভাঙা কোড commit হবে না, আর আপনি warning পাবেন। কোড ঠিক হয়ে যাবেই, এই গ্যারান্টি দেয় না। warning দেখলে নিজে চেক করবেন।
@@ -178,7 +180,7 @@ claude --agent architect      # নিজেও কোড লেখে, দর�
 | React (Vite) | সবসময় দিন। Vite-এর `tsconfig.json`-এ শুধু references থাকে, তাই ডিফল্ট `tsc --noEmit` কিছু চেক করে না | `tsc -b && vitest run` |
 | Express (JS) | দরকার নেই | ডিফল্টে শুধু `test` script চলে |
 
-**Claude-কে `.env` পড়তে দিতে চাইলে** `settings.json`-এর `permissions.deny` থেকে লাইনগুলো সরান, আর `guard.cjs`-এর "Secrets" অংশের দুটো লাইন মুছুন।
+**Claude-কে `.env` পড়তে দিতে চাইলে** `settings.json`-এর `permissions.deny` থেকে লাইনগুলো সরান, আর `guard.cjs`-এর শেষের দিকে `if (splitCommands(cmd).some(readsEnv))` দিয়ে শুরু হওয়া লাইনটা মুছুন।
 
 ## সচল রাখা
 
@@ -188,7 +190,7 @@ Node বা Claude Code আপডেট করার পরে, বা টেম
 node test/selftest.cjs
 ```
 
-এটা একটা temp ফোল্ডারে hook, installer আর agent ফাইলের ২৭১টা চেক চালায়। কোনো network বা model call লাগে না। শেষে `OK` দেখায়, অথবা কোনগুলো fail করেছে তার তালিকা।
+এটা একটা temp ফোল্ডারে hook, installer আর agent ফাইলের ৪১২টা চেক চালায়। কোনো network বা model call লাগে না। শেষে `OK` দেখায়, অথবা কোনগুলো fail করেছে তার তালিকা।
 
 self-test hook script-গুলো সরাসরি চালায়, তাই Claude Code নিজে বদলালে সেটা ধরতে পারে না। সেটা যাচাই করতে টেমপ্লেট বসানো কোনো প্রজেক্টে নতুন session খুলে Claude-কে `git reset --hard` চালাতে বলুন। guard আটকালে বুঝবেন hook ঠিকমতো যুক্ত আছে।
 
@@ -204,7 +206,7 @@ maintain না করলে কী বন্ধ হয়ে যেতে প�
 
 ## সীমাবদ্ধতা
 
-- **guard একটা নিরাপত্তা জাল, পুরোপুরি নিশ্চিত সুরক্ষা না।** কমান্ড কোনো script ফাইলের ভেতরে লুকানো থাকলে (যেমন `npm run reset-db` বা `node scripts/wipe.js`) এটা ধরতে পারে না। `grep -r KEY .` দিয়ে পুরো ফোল্ডার খুঁজলে `.env`-এর লাইনও বেরিয়ে আসতে পারে। আসল সুরক্ষা হলো production-এর credential লোকাল `.env`-এ না রাখা।
+- **guard একটা নিরাপত্তা জাল, পুরোপুরি নিশ্চিত সুরক্ষা না।** ভুল করে বিপজ্জনক কমান্ড চালানোর সাধারণ উপায়গুলো ধরে, কিন্তু ইচ্ছে করে এড়িয়ে যাওয়ার জন্য লেখা কমান্ড না। কমান্ড কোনো script ফাইলের ভেতরে লুকানো থাকলে (যেমন `npm run reset-db` বা `node scripts/wipe.js`), বা কোনো program নিজেই `.env` পড়লে (`node -e "...readFileSync('.env')"`, `git show HEAD:.env`) এটা ধরতে পারে না। `grep -r KEY .` দিয়ে পুরো ফোল্ডার খুঁজলে `.env`-এর লাইনও বেরিয়ে আসতে পারে। আসল সুরক্ষা হলো production-এর credential লোকাল `.env`-এ না রাখা।
 - **verify শুধু Claude-এর Edit আর Write টুলের এডিট ধরে।** Claude shell কমান্ড দিয়ে (যেমন `sed -i`) কোড বদলালে সেটা ধরা পড়ে না, তখন কোনো চেক চলে না।
 - **fence ঠিক করার গ্যারান্টি দেয় না।** উপরে ব্যাখ্যা আছে।
 - **`.env`-এর deny rule নির্দিষ্ট নাম ধরে লেখা:** `.env`, `.env.local`, `.env.development`, `.env.production`, `.env.staging`, `.env.test`, `.env.*.local`। অন্য নামের secret ফাইল থাকলে `settings.json`-এ যোগ করুন।
@@ -215,12 +217,16 @@ maintain না করলে কী বন্ধ হয়ে যেতে প�
 
 Windows 11-এ Claude Code 2.1.300, Node 24, TypeScript 7 আর Prettier 3 দিয়ে টেস্ট করা হয়েছে।
 
-**Script দিয়ে টেস্ট** (`node test/selftest.cjs`, ২৭১টা চেক, সব পাস):
+**Script দিয়ে টেস্ট** (`node test/selftest.cjs`, ৪১২টা চেক, সব পাস):
 
-- guard: ২৩৫টা কমান্ড (১১৯টা আটকানোর, ১১৬টা চলতে দেওয়ার)
-- verify: এক package আর monorepo, commit gate, ৩ বার চেষ্টার সীমা, timeout আর ভুল input
-- installer: নতুন ইনস্টল, পুনরায় চালানো, আপনার নিজের settings-এর সাথে merge, আর `.bak` backup সহ `--force`
+- guard: ৩৫৪টা কমান্ড (১৮৬টা আটকানোর, ১৬৮টা চলতে দেওয়ার, এর মধ্যে `npm install`, `git stash`, `rm -rf node_modules`-এর মতো দৈনন্দিন কমান্ডও আছে), আর লম্বা কমান্ডেও দ্রুত থাকে কিনা (১০০ ms-এর কম)
+- verify: এক package আর monorepo, commit gate (শুধু "git commit" উল্লেখ করা কমান্ডসহ), ৩ বার চেষ্টার সীমা, ইনস্টল না থাকা package manager, timeout আর ভুল input
+- installer: নতুন ইনস্টল, পুনরায় চালানো, আপনার নিজের settings-এর সাথে merge, `.bak` backup সহ `--force` (দ্বিতীয় `--force`-এ প্রথম backup থেকে যায়), BOM-ওয়ালা `settings.json`, আর ভাঙা `settings.json`
+
+একটা স্বাধীন রিভিউ (আলাদা একটা agent, যে আগের ফলাফল না দেখে টেমপ্লেট ভাঙার চেষ্টা করেছে) guard, verify আর installer-এ ফাঁক খুঁজে পেয়েছিল। নিশ্চিত হওয়া প্রতিটা সমস্যা ঠিক করা হয়েছে এবং self-test-এ যোগ করা হয়েছে।
 - agent ফাইল: frontmatter ঠিক আছে কিনা
+
+**Linux-এ** (WSL2-এ Ubuntu 24.04, Node 24, bash 5.2): পুরো self-test পাস করেছে (৩৯৭/৩৯৭, `.git`-এর নিয়ম যোগ করার আগের ভার্সন)। Linux ধরনের কমান্ডের বাড়তি চেক (`sudo rm -rf /`, `pkill -f node`, `kill -9 <pid>`, `lsof -ti :3000 | xargs kill`), স্পেসওয়ালা path-এ ইনস্টল, আর `settings.json`-এর hook কমান্ড হুবহু bash দিয়ে চালানো, সবই পাস করেছে।
 
 ডেভেলপমেন্টের সময় আলাদাভাবে টেস্ট করা: আসল Prettier দিয়ে format (নেস্টেড ফোল্ডার, স্পেসওয়ালা ফাইলের নাম, প্রজেক্টের বাইরের ফাইল আর `node_modules`), আর বড় টেস্ট output-এ verify।
 
@@ -239,7 +245,7 @@ Windows 11-এ Claude Code 2.1.300, Node 24, TypeScript 7 আর Prettier 3 দ�
 
 - আসল session-এ Claude PID দিয়ে একটা process বন্ধ করছে (নাম ধরে আটকানোটা live টেস্ট করা হয়েছে)
 - VS Code extension-এর ভেতরে (সব টেস্ট টার্মিনালের `claude` দিয়ে)
-- macOS আর Linux
+- macOS, আর Linux-এ আসল Claude Code session (Linux-এ self-test আর hook কমান্ড পাস করেছে, নিচে দেখুন)
 - আসল NestJS প্রজেক্টে jest-এর বড় টেস্ট স্যুট
 - haiku ছাড়া অন্য model
 - architect-কে মূল session হিসেবে (`--agent architect`)
