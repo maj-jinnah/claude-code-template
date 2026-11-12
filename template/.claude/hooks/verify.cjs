@@ -36,7 +36,7 @@ const BUDGET_MS = Number(process.env.CLAUDE_VERIFY_BUDGET_MS) || 270 * 1000;
 
 function readStdin() {
   try {
-    return JSON.parse(fs.readFileSync(0, 'utf8') || '{}');
+    return JSON.parse(fs.readFileSync(0, 'utf8') || '{}') || {};
   } catch {
     return {};
   }
@@ -136,7 +136,7 @@ function buildChecks(root, projectDir) {
 
   // 1. Package-specific override wins.
   if (scripts['claude:verify']) {
-    return [{ label: `${pm} run claude:verify${where}`, cwd: root, shell: `${pm} run claude:verify` }];
+    return [{ label: `${pm} run claude:verify${where}`, cwd: root, shell: `${pm} run claude:verify`, pm }];
   }
 
   // 2. Defaults: typecheck (if TypeScript is installed) + the "test" script.
@@ -146,7 +146,7 @@ function buildChecks(root, projectDir) {
     checks.push({ label: `tsc --noEmit${where}`, cwd: root, file: process.execPath, args: [tsc, '--noEmit', '--pretty', 'false'] });
   }
   if (scripts.test && !scripts.test.includes('no test specified')) {
-    checks.push({ label: `${pm} run test${where}`, cwd: root, shell: `${pm} run test` });
+    checks.push({ label: `${pm} run test${where}`, cwd: root, shell: `${pm} run test`, pm });
   }
   return checks;
 }
@@ -240,40 +240,74 @@ function onEdit(input, dir) {
 
 const warnUser = (msg) => console.log(JSON.stringify({ systemMessage: msg }));
 
-// Runs every check of every touched package; returns the first failure, or null if all pass.
+// The package manager itself is not installed (e.g. bun.lock in the repo, but no bun on this PC).
+// That is not a failing test, so the check is skipped and the user is told.
+function pmMissing(check, result) {
+  if (!check.pm || result.ok || result.timedOut) return false;
+  const head = result.out.slice(0, 600);
+  const pm = check.pm;
+  return (
+    new RegExp(`'${pm}' is not recognized as an internal or external command`).test(head) ||
+    new RegExp(`(?:^|[\\s:])${pm}: (?:command )?not found`, 'm').test(head)
+  );
+}
+
+// Runs every check of every touched package. Returns { failure, skipped }:
+// failure = the first failing check (or null), skipped = labels of checks that could not run.
 async function firstFailure(state, dir) {
   const deadline = Date.now() + BUDGET_MS;
   const roots = Array.isArray(state.roots) && state.roots.length ? state.roots : [''];
   const checks = roots.flatMap((root) => buildChecks(path.resolve(dir, root), dir));
+  const skipped = [];
   for (const check of checks) {
     const result = await run(check, Math.max(deadline - Date.now(), 1000));
-    if (!result.ok) return { check, result };
+    if (pmMissing(check, result)) {
+      skipped.push(`${check.label} (${check.pm} is not installed)`);
+      continue;
+    }
+    if (!result.ok) return { failure: { check, result }, skipped };
   }
-  return null;
+  return { failure: null, skipped };
 }
+const skippedNote = (skipped) =>
+  skipped.length ? `verify hook: NOT checked: ${skipped.join(', ')}. Install it, or add a "claude:verify" script.` : '';
 
 function tailOf(out) {
   const clean = out.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').trim(); // strip colour codes
   return clean.length > MAX_OUTPUT ? '...\n' + clean.slice(-MAX_OUTPUT) : clean;
 }
 
-// `git commit`, also with global options in between: git -c user.name=x commit ...
-const GIT_COMMIT = /\bgit(?:\s+(?:-[cC]\s+\S+|--[\w-]+(?:=\S+)?))*\s+commit\b/;
+// A `git commit` COMMAND (not the words "git commit" inside grep / echo / a PR body), also
+// with global options in between: git -C apps/api commit ..., git -c user.name=x commit ...
+const GIT_COMMIT =
+  /(?:^|[;&|(\n{]|\$\(|\bthen\s|\bdo\s)\s*(?:\w+=\S*\s+)*(?:[\w.~:\/\\-]*[\/\\])?git(?:\.exe)?(?:\s+(?:-[cC]\s+(?:"[^"\n]*"|'[^'\n]*'|[^\s"']+)|--(?:git-dir|work-tree|namespace|exec-path|config-env)\s+\S+|--[\w-]+(?:=\S+)?))*\s+commit\b/g;
+
+// True if at least one `git commit` in the command runs WITHOUT --no-verify / -n.
+// The message text is ignored: `-m "docs: explain --no-verify"` does not skip the gate.
+function commitsWithVerify(cmd) {
+  const bare = cmd.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""'); // blank quoted text
+  for (const m of bare.matchAll(GIT_COMMIT)) {
+    const rest = bare.slice(m.index + m[0].length).split(/&&|\|\||[;|\n]/)[0];
+    if (!/(?:^|\s)(?:--no-verify|-[a-zA-Z]*n[a-zA-Z]*)(?=\s|$)/.test(rest)) return true;
+  }
+  return false;
+}
 
 // PreToolUse (Bash|PowerShell): commit gate. Unverified code must not be committed —
 // Claude often writes code and commits in the same turn, before the Stop check runs.
-// `git commit --no-verify` skips this gate, like it skips git's own hooks.
+// `git commit --no-verify` (or -n) skips this gate, like it skips git's own hooks.
 async function onCommit(input, dir) {
   const cmd = String((input.tool_input && input.tool_input.command) || '');
-  if (!GIT_COMMIT.test(cmd) || /--no-verify\b/.test(cmd)) return 0;
+  if (!commitsWithVerify(cmd)) return 0;
 
   const flag = flagFile(input, dir);
   const state = readFlag(flag);
   if (!state) return 0; // nothing unverified
 
-  const failure = await firstFailure(state, dir);
+  const { failure, skipped } = await firstFailure(state, dir);
   if (!failure) {
     clearFlag(flag); // verified: the Stop check will not repeat it
+    if (skipped.length) warnUser(skippedNote(skipped));
     return 0;
   }
   if (failure.result.timedOut) {
@@ -297,7 +331,7 @@ async function onStop(input, dir) {
   if (!state) return 0; // Claude changed no code since the last successful verification
 
   const roots = Array.isArray(state.roots) ? state.roots : [];
-  const failure = await firstFailure(state, dir);
+  const { failure, skipped } = await firstFailure(state, dir);
 
   if (failure) {
     const { check, result } = failure;
@@ -337,6 +371,7 @@ async function onStop(input, dir) {
   }
 
   clearFlag(flag); // everything passed (or nothing to run)
+  if (skipped.length) warnUser(skippedNote(skipped));
   return 0;
 }
 

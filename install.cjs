@@ -7,7 +7,8 @@
 // - .claude/hooks/*.cjs, .claude/agents/*.md, .claude/scratch/.gitignore
 //                         -> copied. If a file already exists and differs it is left alone,
 //                            or with --force replaced and the old one kept as <name>.bak
-// - .claude/settings.json -> created, or MERGED into the existing one (backup kept)
+//                            (a later --force keeps that and adds <name>.<date-time>.bak)
+// - .claude/settings.json -> created, or MERGED into the existing one (every change backed up)
 // - CLAUDE.md            -> created only if the project doesn't have one
 
 const fs = require('fs');
@@ -29,6 +30,39 @@ if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) {
 }
 
 const log = (tag, msg) => console.log(`  ${tag.padEnd(8)} ${msg}`);
+
+// A backup name that never overwrites an older backup: x.bak, then x.<date-time>.bak
+function backupPath(file) {
+  if (!fs.existsSync(file + '.bak')) return file + '.bak';
+  return `${file}.${new Date().toISOString().replace(/[:.]/g, '-')}.bak`;
+}
+
+// Read the existing settings.json FIRST, so a broken file stops the install before anything is copied.
+const settingsDst = path.join(target, '.claude', 'settings.json');
+let current = null;
+if (fs.existsSync(settingsDst)) {
+  try {
+    current = JSON.parse(fs.readFileSync(settingsDst, 'utf8').replace(/^﻿/, '')); // tolerate a BOM
+  } catch {
+    console.error('\n  ERROR: existing .claude/settings.json is not valid JSON. Fix it and re-run. Nothing was changed.');
+    process.exit(1);
+  }
+  const isObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+  const bad = [];
+  if (!isObject(current)) bad.push('the file must contain a JSON object');
+  else {
+    if (current.hooks !== undefined && !isObject(current.hooks)) bad.push('"hooks" must be an object');
+    for (const [event, list] of Object.entries(isObject(current.hooks) ? current.hooks : {})) {
+      if (!Array.isArray(list)) bad.push(`"hooks.${event}" must be an array`);
+    }
+    if (current.permissions !== undefined && !isObject(current.permissions)) bad.push('"permissions" must be an object');
+  }
+  if (bad.length) {
+    console.error(`\n  ERROR: .claude/settings.json: ${bad.join('; ')}. Fix it and re-run. Nothing was changed.`);
+    process.exit(1);
+  }
+}
+
 console.log(`\nInstalling Claude Code template into ${target}\n`);
 
 // 1. Hook scripts, subagents, scratch folder
@@ -53,33 +87,27 @@ for (const sub of ['hooks', 'agents', 'scratch']) {
       log('skip', `${rel} (differs from template, use --force to update)`);
     } else {
       // the project's version differs (older template, or your own edits): keep it
-      fs.copyFileSync(dst, dst + '.bak');
+      const bak = backupPath(dst);
+      fs.copyFileSync(dst, bak);
       fs.copyFileSync(srcFile, dst);
-      log('update', `${rel} (previous version saved as ${name}.bak)`);
+      log('update', `${rel} (previous version saved as ${path.basename(bak)})`);
     }
   }
 }
 
 // 2. settings.json (merge)
 const settingsSrc = JSON.parse(fs.readFileSync(path.join(TEMPLATE, '.claude', 'settings.json'), 'utf8'));
-const settingsDst = path.join(target, '.claude', 'settings.json');
 
-if (!fs.existsSync(settingsDst)) {
+if (!current) {
   fs.writeFileSync(settingsDst, JSON.stringify(settingsSrc, null, 2) + '\n');
   log('create', '.claude/settings.json');
 } else {
-  let current;
-  try {
-    current = JSON.parse(fs.readFileSync(settingsDst, 'utf8'));
-  } catch {
-    console.error('\n  ERROR: existing .claude/settings.json is not valid JSON. Fix it and re-run.');
-    process.exit(1);
-  }
   const before = JSON.stringify(current);
 
   // permissions.deny: union
   current.permissions = current.permissions || {};
-  const deny = new Set(current.permissions.deny || []);
+  const oldDeny = current.permissions.deny;
+  const deny = new Set(Array.isArray(oldDeny) ? oldDeny : typeof oldDeny === 'string' ? [oldDeny] : []);
   if (force) {
     // rules from the first version of this template: they also blocked .env.example
     deny.delete('Read(./.env.*)');
@@ -119,11 +147,11 @@ if (!fs.existsSync(settingsDst)) {
   if (JSON.stringify(current) === before) {
     log('skip', '.claude/settings.json (already up to date)');
   } else {
-    // keep the FIRST backup: it is your original file from before this template
-    const bak = settingsDst + '.bak';
-    if (!fs.existsSync(bak)) fs.copyFileSync(settingsDst, bak);
+    // every change gets its own backup; older backups are never overwritten
+    const bak = backupPath(settingsDst);
+    fs.copyFileSync(settingsDst, bak);
     fs.writeFileSync(settingsDst, JSON.stringify(current, null, 2) + '\n');
-    log('merge', '.claude/settings.json (original kept as settings.json.bak)');
+    log('merge', `.claude/settings.json (previous version saved as ${path.basename(bak)})`);
   }
 }
 
