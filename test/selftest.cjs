@@ -95,6 +95,33 @@ try {
     'git commit -m "a"\npsql <<EOF\nDROP TABLE users;\nEOF', 'git commit -m "x" && cat .env',
     'git commit -m "x" && taskkill /IM node.exe /F', 'grep -rn TODO src && git reset --hard',
     'echo "cleaning up" && rm -rf .', 'echo done; killall node',
+    // git: global options before the subcommand, flags in any order, other ways to discard work
+    'git -C ../api reset --hard', 'git -C "my dir/api" reset --hard', 'git -C apps/web push --force',
+    'git -c core.x=y clean -fd', 'git --no-pager reset --hard HEAD~1', 'git --git-dir ../x/.git --work-tree ../x checkout .',
+    'git reset HEAD~1 --hard', 'git reset -q --hard origin/main', 'git checkout HEAD -- .', 'git checkout HEAD .',
+    'git restore -W .', 'git restore --source=HEAD --staged --worktree .', 'git.exe reset --hard', 'git push -uf origin main',
+    'git -C api commit -m "wip" && git reset --hard',
+    // processes: other ways to kill by name
+    'taskkill /F /FI "IMAGENAME eq node.exe"', 'MSYS_NO_PATHCONV=1 taskkill /IM node.exe /F',
+    "Get-Process | Where-Object { $_.ProcessName -eq 'node' } | Stop-Process -Force",
+    'Get-Process -Name node | ForEach-Object { Stop-Process -Id $_.Id }', 'ps node | Stop-Process',
+    "ps aux | grep node | grep -v grep | awk '{print $2}' | xargs kill -9",
+    'bash -c "killall node"', 'powershell -ExecutionPolicy Bypass -Command "Stop-Process -Name node"',
+    'if pgrep node >/dev/null; then killall node; fi', 'timeout 5 killall node', 'sudo -u me killall node',
+    'env killall node', 'cmd.exe /d /c taskkill /IM node.exe', '/usr/bin/killall node', 'pkill --full node',
+    'kill $(pgrep -f "node")', 'pgrep -f vite | xargs kill',
+    // recursive delete: more spellings
+    'Remove-Item -Recurse -Force $HOME', 'Remove-Item -Recurse -Force $env:USERPROFILE', 'Remove-Item -r -fo .',
+    'ri -Recurse -Force .', 'rmdir /s /q .', 'rm -rf .git', 'rm -rf ./.git/', 'Remove-Item -Recurse -Force .git', 'rd /s /q .git', 'rd /s /q C:\\', 'rm -rf "$(pwd)"', 'rm -rf $PWD', 'rm -rf ../../', 'rm -rf ../..',
+    // databases
+    'dropdb myapp_dev', 'mysqladmin -u root drop app', 'docker system prune -a --volumes', 'npx mikro-orm schema:drop --run',
+    "mongosh --eval 'db.users.remove({})'",
+    // .env with something after the file name, through other programs, globs, redirection
+    'grep DATABASE_URL .env 2>/dev/null', 'grep KEY .env -n', "rg X -g '.env*'", 'grep -f .env src', 'grep -e KEY .env',
+    'docker compose exec api cat .env', 'sh -c "cat .env"', 'while read l; do echo $l; done < .env', 'cat .env 2>&1',
+    'findstr KEY .env', 'awk -F= "{print $1}" .env', 'Get-Content -Path .\\.env', 'cat .env*',
+    // publishing
+    'pnpm -r publish', 'npx changeset publish', 'npm run publish',
   ];
   const ALLOW = [
     'npm run start:dev', 'npx prisma migrate dev --name add_user', 'npx prisma db push', 'npx prisma generate',
@@ -139,6 +166,32 @@ try {
     'git commit -m "drop table of contents from README"', "git commit -m 'feat: a; b | c && d (rm -rf / is blocked now)'",
     'git tag -a v1.0.0 -m "release: removes rm -rf . from scripts"', 'git commit -m "first line\nsecond line mentions git push --force"',
     'git commit -m "fix(guard): block taskkill /IM node.exe and killall node"',
+    // git with global options, safe variants
+    'git -C ../api status', 'git -C api commit -m "docs: never run git reset --hard"', 'git -C api push --force-with-lease',
+    'git --no-pager log --oneline', 'git -C api clean -n', 'git clean -fdn', 'git restore . --staged', 'git restore -S .',
+    'git -c user.name=x commit -m "$(cat <<\'EOF\'\nexplain git push --force and cat .env\nEOF\n)"',
+    // PowerShell here-string commit messages (with an apostrophe)
+    "git commit -m @'\nfix: don't block grep\n\nPreviously `git reset --hard` and cat .env were matched\n'@",
+    'git commit -m @"\nfix: stop killall node in docs\n"@',
+    // .env only mentioned, or written (not read)
+    'ls -la | grep .env', 'git ls-files | grep .env', 'dir /a | findstr .env', 'cat .env.local.example', 'cat .env.example > .env',
+    'cp .env.example .env', 'grep -v "^#" .env.example', 'echo "cat .env is blocked"',
+    // only mentions or lookups
+    'find docs -name "*.md" | xargs grep -l "prisma migrate reset"', 'find . -exec grep -n "git reset --hard" {} +',
+    '  grep -rn "git push --force" docs', 'sudo grep -rn "killall" /etc/cron.d',
+    'echo \'{"tool_input":{"command":"git reset --hard"}}\' | node .claude/hooks/guard.cjs',
+    'command -v pkill', 'Get-Command Stop-Process', "sed -i 's/git push --force/git push --force-with-lease/' x.sh",
+    'gh api repos/o/r/issues/1/comments -f body="never run git reset --hard"', 'npm publish --dry-run',
+    'npm run publish-docs', 'kill 1234 && find . -name "*.log"', 'Remove-Item -Recurse -Force dist && git add .',
+    'Remove-Item -Recurse -Force dist && cd ..',
+    // kill by PID / specific command line
+    'kill $(pgrep -f "node dist/main.js")', 'pgrep -f "nest start" | xargs kill', 'pkill --full "node dist/main.js"',
+    'Get-NetTCPConnection -LocalPort 3000 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }',
+    'rm -rf ../dist', 'rm -rf ./build/*', 'rm -rf .github/workflows/old.yml', 'rm .gitkeep', 'git rm --cached .gitignore',
+    // everyday commands
+    'rm -rf node_modules package-lock.json && npm install', 'git stash && git checkout main && git stash pop',
+    'docker exec -it pg psql -U postgres -c "select count(*) from users"', 'Test-Path .env', 'node --env-file=.env dist/main.js',
+    'Select-String -Path src\\*.ts -Pattern "TODO"', 'git commit --amend --no-edit', 'npx prisma db seed', 'rd /s /q dist', 'Remove-Item -Recurse $env:TEMP\\cct',
   ];
   for (const cmd of BLOCK) {
     const r = runHook(GUARD, { tool_input: { command: cmd } });
@@ -149,6 +202,18 @@ try {
     check(`allow: ${JSON.stringify(cmd).slice(0, 90)}`, r.code === 0, `exit ${r.code}`);
   }
   check('guard: malformed input is allowed', runHook(GUARD, 'not json').code === 0);
+  check('guard: null input is allowed', runHook(GUARD, 'null').code === 0);
+  {
+    // a long commit message must not make the regexes slow (the hook has a 10 s timeout)
+    const names = Array.from({ length: 60 }, (_, i) => `'f${i}'`).join(', ');
+    for (const cmd of [`git commit -m "refactor: rename ${names}"`, `grep -rn "${names}" src`, `git commit -m "${names}" && git reset --hard`]) {
+      const t0 = Date.now();
+      const r = runHook(GUARD, { tool_input: { command: cmd } });
+      const ms = Date.now() - t0;
+      check(`guard: long command is fast (${ms} ms)`, ms < 3000, `${ms} ms`);
+      check('guard: long command gives the right answer', r.code === (cmd.includes('reset') ? 2 : 0), `exit ${r.code}`);
+    }
+  }
   console.log(`  ${BLOCK.length} block + ${ALLOW.length} allow cases`);
 
   // ------------------------------------------------------------------ verify
@@ -188,7 +253,31 @@ try {
   check('commit gate: failing check blocks git commit', pre('git commit -m "x"').code === 2);
   check('commit gate: other commands pass', pre('git status').code === 0);
   check('commit gate: --no-verify passes', pre('git commit --no-verify -m "x"').code === 0);
+  check('commit gate: -n passes', pre('git commit -n -m "x"').code === 0);
+  for (const c of ['grep -rn "git commit" docs', 'echo "remember to git commit"', 'gh pr create --body "run git commit first"']) {
+    check(`commit gate: only mentions "git commit" -> passes: ${c}`, pre(c).code === 0);
+  }
+  for (const c of [
+    'git commit -m "docs: explain --no-verify"', 'git commit -m x && git push --no-verify', 'git -C "my app" commit -m x',
+    'git.exe commit -m x', 'git add . && git commit -m x', "git commit -m @'\nfix: don't\n'@", 'git -c user.name=x commit -am x',
+  ]) {
+    check(`commit gate: blocks ${JSON.stringify(c)}`, pre(c).code === 2);
+  }
   reset();
+
+  // package manager not installed: the check is skipped with a warning, not counted as a failure
+  const bunMissing = spawnSync('bun --version', { shell: true, encoding: 'utf8' }).status !== 0;
+  if (bunMissing) {
+    setTest(PASS);
+    fs.writeFileSync(path.join(proj, 'bun.lock'), '');
+    edit('src/a.ts');
+    const noPm = stop();
+    check('missing package manager -> not a failure, user warned', noPm.code === 0 && /bun is not installed/.test(noPm.out), noPm.err.split('\n')[0]);
+    fs.rmSync(path.join(proj, 'bun.lock'));
+    reset();
+  } else {
+    console.log('  (bun is installed here: the "package manager missing" case is not tested)');
+  }
 
   setTest(PASS);
   edit('src/a.ts');
@@ -259,6 +348,32 @@ try {
   check('changed hook is left alone without --force', /guard\.cjs \(differs from template/.test(inst()));
   check('--force updates and keeps a .bak', / update .*guard\.cjs/.test(inst('--force')) &&
     fs.existsSync(path.join(target, '.claude', 'hooks', 'guard.cjs.bak')));
+  {
+    // a second --force must not overwrite the first backup
+    const hooksDir = path.join(target, '.claude', 'hooks');
+    const firstBak = fs.readFileSync(path.join(hooksDir, 'guard.cjs.bak'), 'utf8');
+    fs.appendFileSync(path.join(hooksDir, 'guard.cjs'), '\n// second edit\n');
+    inst('--force');
+    const baks = fs.readdirSync(hooksDir).filter((f) => /^guard\.cjs\..*bak$/.test(f));
+    check('second --force keeps the first .bak and adds another', baks.length === 2 &&
+      fs.readFileSync(path.join(hooksDir, 'guard.cjs.bak'), 'utf8') === firstBak, baks.join(', '));
+  }
+  {
+    // settings.json with a BOM is read; a broken structure stops the install BEFORE anything is copied
+    const t2 = path.join(tmp, 'target2');
+    fs.mkdirSync(path.join(t2, '.claude'), { recursive: true });
+    const sp = path.join(t2, '.claude', 'settings.json');
+    fs.writeFileSync(sp, '﻿' + JSON.stringify({ permissions: { deny: 'Bash(rm:*)' } }));
+    const r1 = spawnSync(process.execPath, [INSTALL, t2], { encoding: 'utf8' });
+    const s1 = JSON.parse(fs.readFileSync(sp, 'utf8'));
+    check('settings.json with BOM + string deny is merged', r1.status === 0 && s1.permissions.deny.includes('Bash(rm:*)'), r1.stderr);
+    const t3 = path.join(tmp, 'target3');
+    fs.mkdirSync(path.join(t3, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(t3, '.claude', 'settings.json'), JSON.stringify({ hooks: { Stop: { command: 'x' } } }));
+    const r2 = spawnSync(process.execPath, [INSTALL, t3], { encoding: 'utf8' });
+    check('broken hooks structure -> clear error, nothing copied', r2.status === 1 && /hooks\.Stop" must be an array/.test(r2.stderr) &&
+      !fs.existsSync(path.join(t3, '.claude', 'hooks')), r2.stderr);
+  }
 
   // ------------------------------------------------------------------ files
   section('template files');
